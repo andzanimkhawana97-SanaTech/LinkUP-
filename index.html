@@ -2,12 +2,125 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="mobile-web-app-capable" content="yes">
   <title>LinkUP</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
     * { -webkit-tap-highlight-color: transparent; }
     input, textarea { font-size: 16px !important; }
+      
+      /* Mobile-specific styles */
+      html, body {
+        height: 100%;
+        height: -webkit-fill-available;
+        overflow: hidden;
+      }
+      
+      #app {
+        height: 100vh;
+        height: 100dvh;
+        height: -webkit-fill-available;
+        overflow: hidden;
+      }
+      
+      /* Chat screen mobile layout */
+      .chat-screen {
+        display: flex;
+        flex-direction: column;
+        height: 100vh;
+        height: 100dvh;
+        height: -webkit-fill-available;
+        max-height: 100vh;
+        max-height: 100dvh;
+        overflow: hidden;
+      }
+      
+      .chat-header-mobile {
+        flex-shrink: 0;
+        height: 56px;
+        min-height: 56px;
+      }
+      
+      .chat-messages-mobile {
+        flex: 1;
+        overflow-y: auto;
+        overflow-x: hidden;
+        -webkit-overflow-scrolling: touch;
+        overscroll-behavior: contain;
+      }
+      
+      .chat-input-mobile {
+        flex-shrink: 0;
+        position: sticky;
+        bottom: 0;
+        background: white;
+        padding-bottom: env(safe-area-inset-bottom, 0);
+      }
+      
+      /* Fix for iOS keyboard */
+      @supports (-webkit-touch-callout: none) {
+        .chat-input-mobile {
+          padding-bottom: max(env(safe-area-inset-bottom), 8px);
+        }
+      }
+      
+      /* Sidebar mobile layout */
+      .sidebar-mobile {
+        height: 100vh;
+        height: 100dvh;
+        height: -webkit-fill-available;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+      }
+      
+      .sidebar-header-mobile {
+        flex-shrink: 0;
+      }
+      
+      .sidebar-content-mobile {
+        flex: 1;
+        overflow-y: auto;
+        overflow-x: hidden;
+        -webkit-overflow-scrolling: touch;
+      }
+      
+      /* Hide scrollbar on mobile */
+      @media (max-width: 768px) {
+        .chat-messages-mobile::-webkit-scrollbar,
+        .sidebar-content-mobile::-webkit-scrollbar {
+          display: none;
+        }
+        .chat-messages-mobile,
+        .sidebar-content-mobile {
+          -ms-overflow-style: none;
+          scrollbar-width: none;
+        }
+      }
+      
+      /* Voice recording bar mobile */
+      .voice-recording-bar {
+        position: absolute;
+        bottom: 100%;
+        left: 0;
+        right: 0;
+        background: #1a1a1a;
+        padding: 12px 16px;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        border-top: 1px solid #333;
+      }
+      
+      /* Image preview modal mobile */
+      @media (max-width: 768px) {
+        .image-preview-modal img {
+          max-height: 60vh;
+        }
+      }
     .text-shadow { text-shadow: 0 1px 3px rgba(0,0,0,0.8); }
     /* Slide progress animation */
     .slide-progress-bar { transition: width 0.1s linear; }
@@ -198,15 +311,10 @@
       const isSecure = location.protocol === 'https:' || location.hostname === 'localhost' || location.hostname === '127.0.0.1';
       const isFileProtocol = location.protocol === 'file:';
       
-      if (isFileProtocol) {
-        log('Cannot make calls - file:// protocol detected');
-        alert('📞 Calls require a web server\n\nTo make voice/video calls, you need to:\n\n1. Host this file on a web server (localhost or HTTPS)\n2. Or use the built React app\n\nOpening files directly (file://) does not support camera/microphone access due to browser security restrictions.');
-        return;
-      }
-      
-      if (!isSecure) {
-        log('Cannot make calls - not HTTPS');
-        alert('📞 Calls require HTTPS\n\nTo make voice/video calls, please access this app via HTTPS (secure connection).');
+      // Use demo mode if not in secure context
+      if (isFileProtocol || !isSecure) {
+        log('Using demo call mode (file:// or non-HTTPS detected)');
+        startDemoCall(user, type);
         return;
       }
 
@@ -594,6 +702,184 @@
       });
     }
 
+    // Demo Call Mode (works without WebRTC/HTTPS)
+    let demoCallInterval = null;
+    
+    function startDemoCall(user, type) {
+      log('Starting demo ' + type + ' call to ' + user.name);
+      
+      state.call = {
+        ...state.call,
+        active: true,
+        type: type,
+        direction: 'outgoing',
+        status: 'ringing',
+        remoteUser: user,
+        callId: 'demo_' + Date.now(),
+        startTime: null,
+        duration: 0,
+        isMuted: false,
+        isSpeakerOn: false,
+        isVideoOff: false
+      };
+      
+      renderDemoCallScreen();
+      playRingtone('outgoing');
+      
+      // Simulate call being answered after 3 seconds
+      setTimeout(() => {
+        if (state.call.status === 'ringing') {
+          log('Demo call: Simulating answer');
+          stopRingtone();
+          state.call.status = 'connected';
+          state.call.startTime = Date.now();
+          startCallTimer();
+          renderDemoCallScreen();
+        }
+      }, 3000);
+    }
+    
+    function renderDemoCallScreen() {
+      let callScreen = document.getElementById('call-screen');
+      if (!callScreen) {
+        callScreen = document.createElement('div');
+        callScreen.id = 'call-screen';
+        callScreen.className = 'fixed inset-0 z-[100] bg-black flex flex-col';
+        document.body.appendChild(callScreen);
+      }
+      callScreen.classList.remove('hidden');
+      updateDemoCallScreen();
+    }
+    
+    function updateDemoCallScreen() {
+      const callScreen = document.getElementById('call-screen');
+      if (!callScreen || !state.call.active) return;
+      
+      const { type, status, remoteUser, isMuted, isSpeakerOn, isVideoOff } = state.call;
+      const isVideo = type === 'video';
+      const isConnected = status === 'connected';
+      const isRinging = status === 'ringing';
+      
+      callScreen.innerHTML = `
+        <!-- Demo mode banner -->
+        <div class="absolute top-4 left-1/2 transform -translate-x-1/2 z-50 bg-yellow-500/90 text-black text-xs font-medium px-3 py-1 rounded-full">
+          Demo Mode - Simulated Call
+        </div>
+        
+        ${isVideo ? `
+          <!-- Video call background (simulated) -->
+          <div class="absolute inset-0 bg-gradient-to-b from-gray-900 via-gray-800 to-black">
+            <div class="w-full h-full flex items-center justify-center">
+              <div class="w-40 h-40 rounded-full bg-gray-800 flex items-center justify-center">
+                ${remoteUser?.avatar 
+                  ? `<img src="${remoteUser.avatar}" class="w-full h-full rounded-full object-cover" />`
+                  : `<span class="text-6xl text-white font-bold">${remoteUser?.name?.charAt(0) || '?'}</span>`
+                }
+              </div>
+            </div>
+          </div>
+          
+          <!-- Local video placeholder -->
+          <div class="absolute top-24 right-4 w-28 h-40 rounded-2xl overflow-hidden bg-gray-800 shadow-2xl border-2 border-gray-700 ${isVideoOff ? 'hidden' : ''}">
+            <div class="w-full h-full flex items-center justify-center bg-gray-900">
+              ${state.userData?.avatar 
+                ? `<img src="${state.userData.avatar}" class="w-full h-full object-cover" />`
+                : `<span class="text-2xl text-white font-bold">${state.userData?.name?.charAt(0) || 'Y'}</span>`
+              }
+            </div>
+          </div>
+        ` : `
+          <!-- Voice call background -->
+          <div class="absolute inset-0 bg-gradient-to-b from-gray-900 via-black to-gray-900"></div>
+        `}
+        
+        <!-- Call info -->
+        <div class="relative flex-1 flex flex-col items-center justify-center p-8">
+          ${!isVideo ? `
+            <div class="relative mb-6">
+              <div class="w-36 h-36 rounded-full bg-gray-800 flex items-center justify-center overflow-hidden ring-4 ${isRinging ? 'ring-white/30 animate-pulse' : 'ring-gray-700'}">
+                ${remoteUser?.avatar 
+                  ? `<img src="${remoteUser.avatar}" class="w-full h-full object-cover" />`
+                  : `<span class="text-6xl text-white font-bold">${remoteUser?.name?.charAt(0) || '?'}</span>`
+                }
+              </div>
+            </div>
+          ` : ''}
+          
+          <h2 class="text-2xl font-bold text-white mb-2 text-shadow">${remoteUser?.name || 'Unknown'}</h2>
+          <p id="call-status" class="text-gray-300 text-shadow">
+            ${isRinging ? 'Ringing...' : ''}
+            ${isConnected ? `<span id="call-duration">${formatCallDuration(state.call.duration)}</span>` : ''}
+          </p>
+        </div>
+        
+        <!-- Call controls -->
+        <div class="relative p-8 pb-12">
+          <div class="flex items-center justify-center gap-6">
+            <!-- Mute -->
+            <button id="demo-mute-btn" class="w-14 h-14 rounded-full ${isMuted ? 'bg-white' : 'bg-gray-800'} flex items-center justify-center shadow-lg transition-all">
+              ${isMuted 
+                ? `<svg class="w-6 h-6 text-black" fill="currentColor" viewBox="0 0 24 24"><path d="M19 11h-1.7c0 .74-.16 1.43-.43 2.05l1.23 1.23c.56-.98.9-2.09.9-3.28zm-4.02.17c0-.06.02-.11.02-.17V5c0-1.66-1.34-3-3-3S9 3.34 9 5v.18l5.98 5.99zM4.27 3L3 4.27l6.01 6.01V11c0 1.66 1.33 3 2.99 3 .22 0 .44-.03.65-.08l1.66 1.66c-.71.33-1.5.52-2.31.52-2.76 0-5.3-2.1-5.3-5.1H5c0 3.41 2.72 6.23 6 6.72V21h2v-3.28c.91-.13 1.77-.45 2.55-.9l4.18 4.18L21 19.73 4.27 3z"/></svg>`
+                : `<svg class="w-6 h-6 text-white" fill="currentColor" viewBox="0 0 24 24"><path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm5.91-3c-.49 0-.9.36-.98.85C16.52 14.2 14.47 16 12 16s-4.52-1.8-4.93-4.15a.998.998 0 00-.98-.85c-.61 0-1.09.54-1 1.14.49 3 2.89 5.35 5.91 5.78V20c0 .55.45 1 1 1s1-.45 1-1v-2.08a6.993 6.993 0 005.91-5.78c.1-.6-.39-1.14-1-1.14z"/></svg>`
+              }
+            </button>
+            
+            ${isVideo ? `
+              <!-- Camera toggle -->
+              <button id="demo-camera-btn" class="w-14 h-14 rounded-full ${isVideoOff ? 'bg-white' : 'bg-gray-800'} flex items-center justify-center shadow-lg transition-all">
+                ${isVideoOff 
+                  ? `<svg class="w-6 h-6 text-black" fill="currentColor" viewBox="0 0 24 24"><path d="M21 6.5l-4 4V7c0-.55-.45-1-1-1H9.82L21 17.18V6.5zM3.27 2L2 3.27 4.73 6H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.21 0 .39-.08.55-.18L19.73 21 21 19.73 3.27 2z"/></svg>`
+                  : `<svg class="w-6 h-6 text-white" fill="currentColor" viewBox="0 0 24 24"><path d="M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4z"/></svg>`
+                }
+              </button>
+            ` : `
+              <!-- Speaker toggle -->
+              <button id="demo-speaker-btn" class="w-14 h-14 rounded-full ${isSpeakerOn ? 'bg-white' : 'bg-gray-800'} flex items-center justify-center shadow-lg transition-all">
+                ${isSpeakerOn 
+                  ? `<svg class="w-6 h-6 text-black" fill="currentColor" viewBox="0 0 24 24"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/></svg>`
+                  : `<svg class="w-6 h-6 text-white" fill="currentColor" viewBox="0 0 24 24"><path d="M3 9v6h4l5 5V4L7 9H3z"/></svg>`
+                }
+              </button>
+            `}
+            
+            <!-- End call -->
+            <button id="demo-end-call-btn" class="w-16 h-16 rounded-full bg-red-500 hover:bg-red-600 flex items-center justify-center shadow-lg transition-transform active:scale-95">
+              <svg class="w-8 h-8 text-white transform rotate-135" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M20.01 15.38c-1.23 0-2.42-.2-3.53-.56-.35-.12-.74-.03-1.01.24l-1.57 1.97c-2.83-1.35-5.48-3.9-6.89-6.83l1.95-1.66c.27-.28.35-.67.24-1.02-.37-1.11-.56-2.3-.56-3.53 0-.54-.45-.99-.99-.99H4.19C3.65 3 3 3.24 3 3.99 3 13.28 10.73 21 20.01 21c.71 0 .99-.63.99-1.18v-3.45c0-.54-.45-.99-.99-.99z"/>
+              </svg>
+            </button>
+          </div>
+        </div>
+      `;
+      
+      // Attach demo call event listeners
+      document.getElementById('demo-mute-btn')?.addEventListener('click', () => {
+        state.call.isMuted = !state.call.isMuted;
+        updateDemoCallScreen();
+      });
+      
+      document.getElementById('demo-camera-btn')?.addEventListener('click', () => {
+        state.call.isVideoOff = !state.call.isVideoOff;
+        updateDemoCallScreen();
+      });
+      
+      document.getElementById('demo-speaker-btn')?.addEventListener('click', () => {
+        state.call.isSpeakerOn = !state.call.isSpeakerOn;
+        updateDemoCallScreen();
+      });
+      
+      document.getElementById('demo-end-call-btn')?.addEventListener('click', () => {
+        endDemoCall();
+      });
+    }
+    
+    function endDemoCall() {
+      log('Ending demo call');
+      stopRingtone();
+      stopCallTimer();
+      resetCallState();
+    }
+
     // Call timer
     function startCallTimer() {
       stopCallTimer();
@@ -620,6 +906,324 @@
       const secs = seconds % 60;
       return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
     }
+
+    // Voice Note Recording State
+    let mediaRecorder = null;
+    let audioChunks = [];
+    let recordingStartTime = null;
+    let recordingInterval = null;
+    let isRecording = false;
+
+    // Start voice recording
+    async function startVoiceRecording() {
+      try {
+        log('Starting voice recording...');
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        
+        mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
+        audioChunks = [];
+        isRecording = true;
+        recordingStartTime = Date.now();
+        
+        mediaRecorder.ondataavailable = (event) => {
+          if (event.data.size > 0) {
+            audioChunks.push(event.data);
+          }
+        };
+        
+        mediaRecorder.onstop = async () => {
+          log('Recording stopped, processing audio...');
+          const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+          
+          // Convert to base64
+          const reader = new FileReader();
+          reader.onloadend = async () => {
+            const base64Audio = reader.result;
+            await sendVoiceNote(base64Audio, Math.floor((Date.now() - recordingStartTime) / 1000));
+          };
+          reader.readAsDataURL(audioBlob);
+          
+          // Stop all tracks
+          stream.getTracks().forEach(track => track.stop());
+        };
+        
+        mediaRecorder.start(100); // Collect data every 100ms
+        
+        // Update UI to show recording
+        showRecordingUI();
+        
+        // Update recording duration
+        recordingInterval = setInterval(() => {
+          const duration = Math.floor((Date.now() - recordingStartTime) / 1000);
+          const mins = Math.floor(duration / 60);
+          const secs = duration % 60;
+          const durationEl = document.getElementById('recording-duration');
+          if (durationEl) {
+            durationEl.textContent = `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+          }
+        }, 1000);
+        
+        log('Voice recording started');
+      } catch (err) {
+        log('Voice recording error: ' + err.message);
+        alert('Could not access microphone. Please check permissions.');
+        isRecording = false;
+      }
+    }
+    
+    function stopVoiceRecording(cancel = false) {
+      if (!mediaRecorder || !isRecording) return;
+      
+      log('Stopping voice recording, cancel: ' + cancel);
+      isRecording = false;
+      
+      if (recordingInterval) {
+        clearInterval(recordingInterval);
+        recordingInterval = null;
+      }
+      
+      if (cancel) {
+        // Cancel recording - don't save
+        mediaRecorder.stop();
+        audioChunks = [];
+        hideRecordingUI();
+        return;
+      }
+      
+      // Check minimum duration (1 second)
+      const duration = Date.now() - recordingStartTime;
+      if (duration < 1000) {
+        log('Recording too short, cancelling');
+        mediaRecorder.stop();
+        audioChunks = [];
+        hideRecordingUI();
+        return;
+      }
+      
+      mediaRecorder.stop();
+      hideRecordingUI();
+    }
+    
+    function showRecordingUI() {
+      const inputArea = document.querySelector('#message-form')?.parentElement;
+      if (!inputArea) return;
+      
+      // Replace input area with recording UI
+      const recordingUI = document.createElement('div');
+      recordingUI.id = 'recording-ui';
+      recordingUI.className = 'flex-1 flex items-center gap-3 bg-red-500/10 rounded-3xl px-4 py-2';
+      recordingUI.innerHTML = `
+        <div class="flex items-center gap-2 flex-1">
+          <div class="w-3 h-3 bg-red-500 rounded-full animate-pulse"></div>
+          <span id="recording-duration" class="text-red-500 font-medium text-sm">00:00</span>
+          <div class="flex-1 flex items-center justify-center">
+            <div class="flex gap-0.5">
+              ${Array(20).fill(0).map(() => '<div class="w-1 bg-red-500/50 rounded-full animate-pulse" style="height: ' + (Math.random() * 20 + 5) + 'px;"></div>').join('')}
+            </div>
+          </div>
+        </div>
+        <button id="cancel-recording" class="p-2 text-red-500 hover:bg-red-500/20 rounded-full transition-all" title="Cancel">
+          <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+          </svg>
+        </button>
+        <button id="stop-recording" class="p-3 bg-red-500 text-white rounded-full hover:bg-red-600 transition-all" title="Send voice note">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/>
+          </svg>
+        </button>
+      `;
+      
+      // Hide original input elements
+      document.getElementById('attachment-btn')?.parentElement?.classList.add('hidden');
+      document.getElementById('message-form')?.classList.add('hidden');
+      document.getElementById('send-btn')?.classList.add('hidden');
+      document.getElementById('voice-note-btn')?.classList.add('hidden');
+      
+      // Insert recording UI
+      inputArea.insertBefore(recordingUI, inputArea.firstChild);
+      
+      // Attach listeners
+      document.getElementById('cancel-recording')?.addEventListener('click', () => stopVoiceRecording(true));
+      document.getElementById('stop-recording')?.addEventListener('click', () => stopVoiceRecording(false));
+    }
+    
+    function hideRecordingUI() {
+      document.getElementById('recording-ui')?.remove();
+      
+      // Show original input elements
+      document.getElementById('attachment-btn')?.parentElement?.classList.remove('hidden');
+      document.getElementById('message-form')?.classList.remove('hidden');
+      document.getElementById('send-btn')?.classList.remove('hidden');
+      document.getElementById('voice-note-btn')?.classList.remove('hidden');
+    }
+    
+    async function sendVoiceNote(audioBase64, durationSeconds) {
+      if (!state.selectedChatId || !state.user) {
+        log('Cannot send voice note - missing chatId or user');
+        return;
+      }
+      
+      const chatId = state.selectedChatId;
+      const now = new Date();
+      const tempId = 'temp_' + Date.now();
+      
+      log('Sending voice note to chat: ' + chatId);
+      
+      // Create optimistic message
+      const tempMsg = {
+        id: tempId,
+        chatId: chatId,
+        senderId: state.user.uid,
+        text: '',
+        audioUrl: audioBase64,
+        audioDuration: durationSeconds,
+        type: 'voice',
+        timestamp: { toDate: () => now },
+        status: 'sending'
+      };
+      
+      // Add to state
+      state.messages.push(tempMsg);
+      allMessages[chatId] = [...state.messages];
+      
+      // Save to localStorage
+      try {
+        const cacheKey = 'linkup_msgs_' + chatId;
+        const toCache = state.messages.map(m => ({
+          ...m,
+          timestamp: m.timestamp?.toDate?.() ? m.timestamp.toDate().toISOString() : (typeof m.timestamp === 'string' ? m.timestamp : new Date().toISOString())
+        }));
+        localStorage.setItem(cacheKey, JSON.stringify(toCache));
+      } catch (e) {
+        log('Cache save error: ' + e.message);
+      }
+      
+      updateMessages();
+      
+      // Scroll to bottom
+      const messageList = document.getElementById('message-list');
+      if (messageList) {
+        messageList.scrollTop = messageList.scrollHeight;
+      }
+      
+      try {
+        // Save to Firebase
+        const msgRef = await addDoc(collection(db, 'messages'), {
+          chatId: chatId,
+          senderId: state.user.uid,
+          text: '',
+          audioUrl: audioBase64,
+          audioDuration: durationSeconds,
+          type: 'voice',
+          timestamp: serverTimestamp(),
+          status: 'sent'
+        });
+        
+        log('Voice note saved: ' + msgRef.id);
+        
+        // Update chat last message
+        await updateDoc(doc(db, 'chats', chatId), {
+          lastMessage: '🎤 Voice note (' + formatVoiceDuration(durationSeconds) + ')',
+          lastMessageTime: serverTimestamp(),
+          lastMessageSenderId: state.user.uid,
+          lastMessageStatus: 'sent'
+        });
+        
+        // Update to delivered
+        setTimeout(async () => {
+          try {
+            await updateDoc(doc(db, 'messages', msgRef.id), { status: 'delivered' });
+            await updateDoc(doc(db, 'chats', chatId), { lastMessageStatus: 'delivered' });
+          } catch (e) {
+            log('Error updating to delivered: ' + e.message);
+          }
+        }, 500);
+        
+      } catch (err) {
+        log('Error sending voice note: ' + err.message);
+        const failedMsg = state.messages.find(m => m.id === tempId);
+        if (failedMsg) {
+          failedMsg.status = 'failed';
+          updateMessages();
+        }
+      }
+    }
+    
+    function formatVoiceDuration(seconds) {
+      const mins = Math.floor(seconds / 60);
+      const secs = seconds % 60;
+      return `${mins}:${secs.toString().padStart(2, '0')}`;
+    }
+    
+    // Voice note playback
+    let currentAudio = null;
+    let currentAudioId = null;
+    
+    function playVoiceNote(audioUrl, messageId) {
+      // Stop current audio if playing different one
+      if (currentAudio && currentAudioId !== messageId) {
+        currentAudio.pause();
+        currentAudio = null;
+        updateVoiceNoteUI(currentAudioId, false);
+      }
+      
+      const playBtn = document.getElementById('voice-play-' + messageId);
+      const progressBar = document.getElementById('voice-progress-' + messageId);
+      const timeEl = document.getElementById('voice-time-' + messageId);
+      
+      if (currentAudioId === messageId && currentAudio && !currentAudio.paused) {
+        // Pause current
+        currentAudio.pause();
+        updateVoiceNoteUI(messageId, false);
+        return;
+      }
+      
+      // Create new audio
+      currentAudio = new Audio(audioUrl);
+      currentAudioId = messageId;
+      
+      currentAudio.onplay = () => {
+        updateVoiceNoteUI(messageId, true);
+      };
+      
+      currentAudio.onpause = () => {
+        updateVoiceNoteUI(messageId, false);
+      };
+      
+      currentAudio.onended = () => {
+        updateVoiceNoteUI(messageId, false);
+        if (progressBar) progressBar.style.width = '0%';
+      };
+      
+      currentAudio.ontimeupdate = () => {
+        if (currentAudio && progressBar) {
+          const percent = (currentAudio.currentTime / currentAudio.duration) * 100;
+          progressBar.style.width = percent + '%';
+          
+          if (timeEl) {
+            const remaining = Math.floor(currentAudio.duration - currentAudio.currentTime);
+            timeEl.textContent = formatVoiceDuration(remaining);
+          }
+        }
+      };
+      
+      currentAudio.play().catch(err => {
+        log('Audio playback error: ' + err.message);
+      });
+    }
+    
+    function updateVoiceNoteUI(messageId, isPlaying) {
+      const playBtn = document.getElementById('voice-play-' + messageId);
+      if (playBtn) {
+        playBtn.innerHTML = isPlaying 
+          ? '<svg class="w-6 h-6" fill="currentColor" viewBox="0 0 24 24"><path d="M6 4h4v16H6V4zm8 0h4v16h-4V4z"/></svg>'
+          : '<svg class="w-6 h-6" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>';
+      }
+    }
+    
+    // Make playVoiceNote available globally
+    window.playVoiceNote = playVoiceNote;
 
     // Ringtone (using Web Audio API)
     let ringtoneContext = null;
@@ -1109,6 +1713,7 @@
           log('Received requests: ' + state.receivedRequests.length);
           updateSidebar();
           updateTabBadges();
+          updateChatRequestBadge();
         }, (err) => log('Received requests error: ' + err.message)));
       } catch (e) { log('Setup received requests error: ' + e.message); }
 
@@ -1178,7 +1783,7 @@
       log('Slide deleted');
     }
 
-    // Compress and convert image to Base64
+    // Compress and convert image to Base64 with aggressive size reduction
     function compressImageToBase64(file, maxSize = 200) {
       return new Promise((resolve, reject) => {
         const reader = new FileReader();
@@ -1189,16 +1794,19 @@
             let width = img.width;
             let height = img.height;
             
-            // Calculate new dimensions (max 200x200 for profile pics)
+            // For chat images (maxSize > 200), use smaller dimensions to ensure it fits in Firestore
+            const effectiveMaxSize = maxSize > 200 ? Math.min(maxSize, 400) : maxSize;
+            
+            // Calculate new dimensions
             if (width > height) {
-              if (width > maxSize) {
-                height = Math.round((height * maxSize) / width);
-                width = maxSize;
+              if (width > effectiveMaxSize) {
+                height = Math.round((height * effectiveMaxSize) / width);
+                width = effectiveMaxSize;
               }
             } else {
-              if (height > maxSize) {
-                width = Math.round((width * maxSize) / height);
-                height = maxSize;
+              if (height > effectiveMaxSize) {
+                width = Math.round((width * effectiveMaxSize) / height);
+                height = effectiveMaxSize;
               }
             }
             
@@ -1206,10 +1814,33 @@
             canvas.height = height;
             
             const ctx = canvas.getContext('2d');
+            ctx.fillStyle = '#000000';
+            ctx.fillRect(0, 0, width, height);
             ctx.drawImage(img, 0, 0, width, height);
             
-            // Convert to Base64 JPEG with 80% quality
-            const base64 = canvas.toDataURL('image/jpeg', 0.8);
+            // Start with 70% quality and reduce if needed
+            let quality = 0.7;
+            let base64 = canvas.toDataURL('image/jpeg', quality);
+            
+            // Firestore has 1MB doc limit, keep image under 400KB to be safe
+            const maxBytes = 400 * 1024;
+            while (base64.length > maxBytes && quality > 0.2) {
+              quality -= 0.1;
+              base64 = canvas.toDataURL('image/jpeg', quality);
+              log('Compressing image: quality=' + quality.toFixed(1) + ', size=' + Math.round(base64.length/1024) + 'KB');
+            }
+            
+            // If still too large, reduce dimensions
+            if (base64.length > maxBytes) {
+              const scale = 0.7;
+              canvas.width = Math.round(width * scale);
+              canvas.height = Math.round(height * scale);
+              ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+              base64 = canvas.toDataURL('image/jpeg', 0.5);
+              log('Resized image to ' + canvas.width + 'x' + canvas.height + ', size=' + Math.round(base64.length/1024) + 'KB');
+            }
+            
+            log('Final image size: ' + Math.round(base64.length/1024) + 'KB');
             resolve(base64);
           };
           img.onerror = () => reject(new Error('Failed to load image'));
@@ -1218,6 +1849,11 @@
         reader.onerror = () => reject(new Error('Failed to read file'));
         reader.readAsDataURL(file);
       });
+    }
+    
+    // Helper to add debug log
+    function addLog(msg) {
+      log(msg);
     }
 
     // Upload profile picture (Base64 - stored directly in Firestore, no Firebase Storage needed)
@@ -1424,6 +2060,696 @@
       });
     }
 
+    // Image preview state for sending
+    let pendingImageData = null;
+    let pendingImageCaption = '';
+
+    // Handle attachment files (images, documents, audio)
+    async function handleAttachmentFile(file, type) {
+      if (!file || !state.selectedChatId || !state.user) {
+        log('Cannot send attachment - missing file, chatId, or user');
+        return;
+      }
+      
+      log('Handling attachment: ' + file.name + ' (' + type + ')');
+      
+      try {
+        if (type === 'image' || type === 'media') {
+          if (file.type.startsWith('image/')) {
+            // Show image preview modal like WhatsApp
+            const base64 = await compressImageToBase64(file, 800);
+            showImagePreviewModal(base64);
+            log('Image preview shown');
+          } else if (file.type.startsWith('video/')) {
+            const messageText = '🎥 [Video: ' + file.name + ']';
+            await sendMessage(messageText);
+            log('Video attachment sent');
+          }
+        } else if (type === 'document') {
+          const messageText = '📄 [Document: ' + file.name + ']';
+          await sendMessage(messageText);
+          log('Document attachment sent');
+        } else if (type === 'audio') {
+          const messageText = '🎵 [Audio: ' + file.name + ']';
+          await sendMessage(messageText);
+          log('Audio attachment sent');
+        }
+        
+      } catch (err) {
+        log('Attachment error: ' + err.message);
+        alert('Failed to send attachment: ' + err.message);
+      }
+    }
+
+    // Show WhatsApp-style image preview before sending
+    function showImagePreviewModal(base64Image) {
+      pendingImageData = base64Image;
+      pendingImageCaption = '';
+      
+      // Get recipient name
+      const selectedChat = state.chats.find(c => c.id === state.selectedChatId);
+      const otherUser = selectedChat ? getOtherUser(selectedChat) : null;
+      const recipientName = otherUser?.name || 'User';
+      
+      // Create modal HTML
+      const modalHtml = `
+        <div id="image-preview-modal" class="fixed inset-0 z-[60] bg-black flex flex-col">
+          <!-- Header -->
+          <div class="flex items-center justify-between p-4 bg-black/90">
+            <button id="close-image-preview" class="w-10 h-10 rounded-full flex items-center justify-center text-white hover:bg-white/20 transition-all">
+              <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+            </button>
+            <div class="flex items-center gap-2">
+              <button id="crop-image" class="w-10 h-10 rounded-full flex items-center justify-center text-white hover:bg-white/20 transition-all" title="Crop">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4"/></svg>
+              </button>
+              <button id="rotate-image" class="w-10 h-10 rounded-full flex items-center justify-center text-white hover:bg-white/20 transition-all" title="Rotate">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+              </button>
+            </div>
+          </div>
+          
+          <!-- Image Preview -->
+          <div class="flex-1 flex items-center justify-center p-4 overflow-hidden">
+            <img id="preview-img" src="${base64Image}" alt="Preview" class="max-w-full max-h-full object-contain rounded-lg shadow-2xl">
+          </div>
+          
+          <!-- Caption & Send -->
+          <div class="p-4 bg-black/90">
+            <div class="flex items-center gap-3 max-w-2xl mx-auto">
+              <div class="flex-1 flex items-center bg-gray-800 rounded-full px-4 py-2">
+                <input type="text" id="image-caption-input" placeholder="Add a caption..." class="flex-1 bg-transparent text-white placeholder-gray-400 outline-none text-sm">
+              </div>
+              <button id="send-image-btn" class="w-12 h-12 rounded-full bg-white flex items-center justify-center hover:scale-105 active:scale-95 transition-transform shadow-lg">
+                <svg class="w-6 h-6 text-black" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/></svg>
+              </button>
+            </div>
+            <p class="text-center text-gray-400 text-xs mt-2">Sending to <span class="text-white font-medium">${recipientName}</span></p>
+          </div>
+        </div>
+      `;
+      
+      // Add modal to DOM
+      document.body.insertAdjacentHTML('beforeend', modalHtml);
+      
+      // Attach event listeners
+      document.getElementById('close-image-preview')?.addEventListener('click', closeImagePreviewModal);
+      document.getElementById('send-image-btn')?.addEventListener('click', sendImageFromPreview);
+      document.getElementById('image-caption-input')?.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') {
+          sendImageFromPreview();
+        }
+      });
+      
+      // Focus caption input
+      setTimeout(() => document.getElementById('image-caption-input')?.focus(), 100);
+    }
+    
+    function closeImagePreviewModal() {
+      pendingImageData = null;
+      pendingImageCaption = '';
+      document.getElementById('image-preview-modal')?.remove();
+    }
+    
+    async function sendImageFromPreview() {
+      if (!pendingImageData) return;
+      
+      const caption = document.getElementById('image-caption-input')?.value?.trim() || '';
+      
+      closeImagePreviewModal();
+      
+      // Send image as a message with imageUrl field
+      await sendImageMessage(pendingImageData, caption);
+    }
+    
+    // Send document message with base64 data
+    async function sendDocumentMessage(fileName, base64Data, fileSize, fileType, fileExt) {
+      if (!state.selectedChatId || !state.user) {
+        log('Cannot send document - missing chatId or user');
+        return;
+      }
+      
+      const chatId = state.selectedChatId;
+      const now = new Date();
+      const tempId = 'temp_' + Date.now();
+      
+      log('Sending document to chat: ' + chatId);
+      
+      // Format file size for display
+      const formatFileSize = (bytes) => {
+        if (bytes < 1024) return bytes + ' B';
+        if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+        return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+      };
+      
+      // Create optimistic message
+      const tempMsg = {
+        id: tempId,
+        chatId: chatId,
+        senderId: state.user.uid,
+        text: fileName,
+        documentUrl: base64Data,
+        documentName: fileName,
+        documentSize: fileSize,
+        documentType: fileType,
+        documentExt: fileExt,
+        type: 'document',
+        timestamp: { toDate: () => now },
+        status: 'sending'
+      };
+      
+      // Add to state
+      state.messages.push(tempMsg);
+      allMessages[chatId] = [...state.messages];
+      
+      // Save to localStorage
+      try {
+        const cacheKey = 'linkup_msgs_' + chatId;
+        const toCache = state.messages.map(m => ({
+          ...m,
+          timestamp: m.timestamp?.toDate?.() ? m.timestamp.toDate().toISOString() : (typeof m.timestamp === 'string' ? m.timestamp : new Date().toISOString())
+        }));
+        localStorage.setItem(cacheKey, JSON.stringify(toCache));
+      } catch (e) {
+        log('Cache save error: ' + e.message);
+      }
+      
+      updateMessages();
+      
+      // Scroll to bottom
+      const messageList = document.getElementById('message-list');
+      if (messageList) {
+        messageList.scrollTop = messageList.scrollHeight;
+      }
+      
+      try {
+        // Save to Firebase
+        const msgRef = await addDoc(collection(db, 'messages'), {
+          chatId: chatId,
+          senderId: state.user.uid,
+          text: fileName,
+          documentUrl: base64Data,
+          documentName: fileName,
+          documentSize: fileSize,
+          documentType: fileType,
+          documentExt: fileExt,
+          type: 'document',
+          timestamp: serverTimestamp(),
+          status: 'sent'
+        });
+        
+        log('Document message saved: ' + msgRef.id);
+        
+        // Update chat last message
+        await updateDoc(doc(db, 'chats', chatId), {
+          lastMessage: '📄 ' + fileName,
+          lastMessageTime: serverTimestamp(),
+          lastMessageSenderId: state.user.uid,
+          lastMessageStatus: 'sent'
+        });
+        
+        // Update to delivered
+        setTimeout(async () => {
+          try {
+            await updateDoc(doc(db, 'messages', msgRef.id), { status: 'delivered' });
+            await updateDoc(doc(db, 'chats', chatId), { lastMessageStatus: 'delivered' });
+          } catch (e) {
+            log('Error updating to delivered: ' + e.message);
+          }
+        }, 500);
+        
+      } catch (err) {
+        log('Error sending document: ' + err.message);
+        const failedMsg = state.messages.find(m => m.id === tempId);
+        if (failedMsg) {
+          failedMsg.status = 'failed';
+          updateMessages();
+        }
+      }
+    }
+
+    // Send image message with base64 data
+    async function sendImageMessage(imageBase64, caption = '') {
+      if (!state.selectedChatId || !state.user) {
+        log('Cannot send image - missing chatId or user');
+        return;
+      }
+      
+      const chatId = state.selectedChatId;
+      const now = new Date();
+      const tempId = 'temp_' + Date.now();
+      
+      log('Sending image to chat: ' + chatId);
+      
+      // Create optimistic message with image
+      const tempMsg = {
+        id: tempId,
+        chatId: chatId,
+        senderId: state.user.uid,
+        text: caption || '',
+        imageUrl: imageBase64,
+        type: 'image',
+        timestamp: { toDate: () => now },
+        status: 'sending'
+      };
+      
+      // Add to state
+      state.messages.push(tempMsg);
+      allMessages[chatId] = [...state.messages];
+      
+      // Save to localStorage
+      try {
+        const cacheKey = 'linkup_msgs_' + chatId;
+        const toCache = state.messages.map(m => ({
+          ...m,
+          timestamp: m.timestamp?.toDate?.() ? m.timestamp.toDate().toISOString() : (typeof m.timestamp === 'string' ? m.timestamp : new Date().toISOString())
+        }));
+        localStorage.setItem(cacheKey, JSON.stringify(toCache));
+      } catch (e) {
+        log('Cache save error: ' + e.message);
+      }
+      
+      updateMessages();
+      
+      // Scroll to bottom
+      const messageList = document.getElementById('message-list');
+      if (messageList) {
+        messageList.scrollTop = messageList.scrollHeight;
+      }
+      
+      try {
+        // Save to Firebase
+        const msgRef = await addDoc(collection(db, 'messages'), {
+          chatId: chatId,
+          senderId: state.user.uid,
+          text: caption || '',
+          imageUrl: imageBase64,
+          type: 'image',
+          timestamp: serverTimestamp(),
+          status: 'sent'
+        });
+        
+        log('Image message saved: ' + msgRef.id);
+        
+        // Update chat last message
+        await updateDoc(doc(db, 'chats', chatId), {
+          lastMessage: caption ? '📷 ' + caption : '📷 Photo',
+          lastMessageTime: serverTimestamp(),
+          lastMessageSenderId: state.user.uid,
+          lastMessageStatus: 'sent'
+        });
+        
+        // Update to delivered
+        setTimeout(async () => {
+          try {
+            await updateDoc(doc(db, 'messages', msgRef.id), { status: 'delivered' });
+            await updateDoc(doc(db, 'chats', chatId), { lastMessageStatus: 'delivered' });
+          } catch (e) {
+            log('Error updating to delivered: ' + e.message);
+          }
+        }, 500);
+        
+      } catch (err) {
+        log('Error sending image: ' + err.message);
+        const failedMsg = state.messages.find(m => m.id === tempId);
+        if (failedMsg) {
+          failedMsg.status = 'failed';
+          updateMessages();
+        }
+      }
+    }
+    
+    // Handle sharing location
+    async function handleShareLocation() {
+      if (!navigator.geolocation) {
+        alert('Geolocation is not supported by your browser');
+        return;
+      }
+      
+      log('Getting location...');
+      
+      navigator.geolocation.getCurrentPosition(
+        async (position) => {
+          const { latitude, longitude } = position.coords;
+          const locationUrl = `https://www.google.com/maps?q=${latitude},${longitude}`;
+          const messageText = `📍 [Location: ${latitude.toFixed(6)}, ${longitude.toFixed(6)}]\n${locationUrl}`;
+          await sendMessage(messageText);
+          log('Location shared');
+        },
+        (error) => {
+          log('Location error: ' + error.message);
+          alert('Could not get your location. Please check your permissions.');
+        },
+        { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 }
+      );
+    }
+    
+    // ============== CHAT FEATURES ==============
+    
+    // Search in chat
+    function openSearchInChat() {
+      const modalHtml = `
+        <div id="search-chat-modal" class="fixed inset-0 z-[60] bg-black/80 flex items-start justify-center pt-20 p-4">
+          <div class="bg-white rounded-2xl w-full max-w-md overflow-hidden shadow-2xl">
+            <div class="p-4 border-b border-gray-200">
+              <div class="flex items-center gap-3">
+                <button id="close-search-chat" class="p-2 text-gray-600 hover:text-black rounded-full hover:bg-gray-100 transition-colors">
+                  <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                </button>
+                <input type="text" id="search-chat-input" placeholder="Search messages..." class="flex-1 bg-gray-100 text-black placeholder-gray-500 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-black" autofocus>
+              </div>
+            </div>
+            <div id="search-chat-results" class="max-h-80 overflow-y-auto p-2">
+              <p class="text-center text-gray-500 py-8 text-sm">Type to search messages</p>
+            </div>
+          </div>
+        </div>
+      `;
+      document.body.insertAdjacentHTML('beforeend', modalHtml);
+      
+      const input = document.getElementById('search-chat-input');
+      const resultsContainer = document.getElementById('search-chat-results');
+      
+      // Search on input
+      input?.addEventListener('input', (e) => {
+        const query = e.target.value.toLowerCase().trim();
+        if (!query) {
+          resultsContainer.innerHTML = '<p class="text-center text-gray-500 py-8 text-sm">Type to search messages</p>';
+          return;
+        }
+        
+        // Search through messages
+        const results = state.messages.filter(msg => 
+          msg.text?.toLowerCase().includes(query)
+        ).slice(0, 20); // Limit to 20 results
+        
+        if (results.length === 0) {
+          resultsContainer.innerHTML = '<p class="text-center text-gray-500 py-8 text-sm">No messages found</p>';
+          return;
+        }
+        
+        resultsContainer.innerHTML = results.map(msg => {
+          const isMe = msg.senderId === state.user?.uid;
+          const time = formatMessageTime(msg.timestamp);
+          const highlightedText = msg.text.replace(
+            new RegExp(`(${query})`, 'gi'),
+            '<span class="bg-yellow-200 text-black font-medium">$1</span>'
+          );
+          return `
+            <div class="search-result-item p-3 rounded-lg hover:bg-gray-100 cursor-pointer transition-colors" data-msg-id="${msg.id}">
+              <div class="flex items-center gap-2 mb-1">
+                <span class="text-xs font-medium text-gray-600">${isMe ? 'You' : 'Them'}</span>
+                <span class="text-xs text-gray-400">${time}</span>
+              </div>
+              <p class="text-sm text-black line-clamp-2">${highlightedText}</p>
+            </div>
+          `;
+        }).join('');
+        
+        // Click to scroll to message
+        document.querySelectorAll('.search-result-item').forEach(item => {
+          item.addEventListener('click', () => {
+            const msgId = item.dataset.msgId;
+            document.getElementById('search-chat-modal')?.remove();
+            
+            // Find and scroll to message
+            setTimeout(() => {
+              const msgEl = document.querySelector(`[data-msg-id="${msgId}"]`);
+              if (msgEl) {
+                msgEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                msgEl.classList.add('bg-yellow-100');
+                setTimeout(() => msgEl.classList.remove('bg-yellow-100'), 2000);
+              }
+            }, 100);
+          });
+        });
+      });
+      
+      // Close modal
+      document.getElementById('close-search-chat')?.addEventListener('click', () => {
+        document.getElementById('search-chat-modal')?.remove();
+      });
+      
+      // Close on escape
+      const handleEscape = (e) => {
+        if (e.key === 'Escape') {
+          document.getElementById('search-chat-modal')?.remove();
+          document.removeEventListener('keydown', handleEscape);
+        }
+      };
+      document.addEventListener('keydown', handleEscape);
+    }
+    
+    // Mute chat options
+    function openMuteOptions() {
+      const chatId = state.selectedChatId;
+      const isMuted = localStorage.getItem('muted_' + chatId) === 'true';
+      
+      if (isMuted) {
+        // Already muted - ask to unmute
+        if (confirm('This chat is muted. Unmute it?')) {
+          localStorage.removeItem('muted_' + chatId);
+          alert('Chat unmuted!');
+        }
+        return;
+      }
+      
+      const modalHtml = `
+        <div id="mute-modal" class="fixed inset-0 z-[60] bg-black/80 flex items-center justify-center p-4">
+          <div class="bg-white rounded-2xl w-full max-w-sm overflow-hidden shadow-2xl">
+            <div class="p-4 border-b border-gray-200">
+              <h3 class="text-lg font-semibold text-black text-center">Mute notifications</h3>
+            </div>
+            <div class="p-2">
+              <button class="mute-option w-full p-3 text-left text-black hover:bg-gray-100 rounded-lg transition-colors" data-duration="8h">8 Hours</button>
+              <button class="mute-option w-full p-3 text-left text-black hover:bg-gray-100 rounded-lg transition-colors" data-duration="1w">1 Week</button>
+              <button class="mute-option w-full p-3 text-left text-black hover:bg-gray-100 rounded-lg transition-colors" data-duration="always">Always</button>
+            </div>
+            <div class="p-3 border-t border-gray-200">
+              <button id="cancel-mute" class="w-full py-2.5 text-gray-600 hover:text-black font-medium transition-colors">Cancel</button>
+            </div>
+          </div>
+        </div>
+      `;
+      document.body.insertAdjacentHTML('beforeend', modalHtml);
+      
+      // Handle mute options
+      document.querySelectorAll('.mute-option').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const duration = btn.dataset.duration;
+          localStorage.setItem('muted_' + chatId, 'true');
+          localStorage.setItem('muted_until_' + chatId, duration);
+          document.getElementById('mute-modal')?.remove();
+          alert('Chat muted for ' + (duration === 'always' ? 'forever' : duration) + '!');
+        });
+      });
+      
+      document.getElementById('cancel-mute')?.addEventListener('click', () => {
+        document.getElementById('mute-modal')?.remove();
+      });
+    }
+    
+    // Wallpaper picker
+    function openWallpaperPicker() {
+      const chatId = state.selectedChatId;
+      const currentWallpaper = localStorage.getItem('wallpaper_' + chatId) || 'default';
+      
+      const wallpapers = [
+        { id: 'default', name: 'Default', class: 'bg-black' },
+        { id: 'gray', name: 'Gray', class: 'bg-gray-900' },
+        { id: 'dark-blue', name: 'Dark Blue', class: 'bg-slate-900' },
+        { id: 'dark-green', name: 'Dark Green', class: 'bg-emerald-950' },
+        { id: 'dark-purple', name: 'Dark Purple', class: 'bg-purple-950' },
+        { id: 'gradient1', name: 'Gradient 1', class: 'bg-gradient-to-b from-gray-900 to-black' },
+        { id: 'gradient2', name: 'Gradient 2', class: 'bg-gradient-to-br from-slate-900 to-gray-900' },
+        { id: 'gradient3', name: 'Gradient 3', class: 'bg-gradient-to-b from-zinc-900 to-black' },
+      ];
+      
+      const modalHtml = `
+        <div id="wallpaper-modal" class="fixed inset-0 z-[60] bg-black/80 flex items-center justify-center p-4">
+          <div class="bg-white rounded-2xl w-full max-w-sm overflow-hidden shadow-2xl">
+            <div class="p-4 border-b border-gray-200 flex items-center justify-between">
+              <h3 class="text-lg font-semibold text-black">Chat Wallpaper</h3>
+              <button id="close-wallpaper" class="p-2 text-gray-600 hover:text-black rounded-full hover:bg-gray-100 transition-colors">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+              </button>
+            </div>
+            <div class="p-4 grid grid-cols-4 gap-3">
+              ${wallpapers.map(wp => `
+                <button class="wallpaper-option w-full aspect-square rounded-xl ${wp.class} border-2 ${currentWallpaper === wp.id ? 'border-black ring-2 ring-black ring-offset-2' : 'border-gray-300'} hover:border-black transition-all relative overflow-hidden" data-wallpaper="${wp.id}" data-class="${wp.class}">
+                  ${currentWallpaper === wp.id ? '<div class="absolute inset-0 flex items-center justify-center"><svg class="w-6 h-6 text-white" fill="currentColor" viewBox="0 0 24 24"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg></div>' : ''}
+                </button>
+              `).join('')}
+            </div>
+          </div>
+        </div>
+      `;
+      document.body.insertAdjacentHTML('beforeend', modalHtml);
+      
+      // Handle wallpaper selection
+      document.querySelectorAll('.wallpaper-option').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const wallpaperId = btn.dataset.wallpaper;
+          const wallpaperClass = btn.dataset.class;
+          localStorage.setItem('wallpaper_' + chatId, wallpaperId);
+          localStorage.setItem('wallpaper_class_' + chatId, wallpaperClass);
+          document.getElementById('wallpaper-modal')?.remove();
+          
+          // Apply wallpaper immediately
+          const messageContainer = document.querySelector('#message-list')?.parentElement;
+          if (messageContainer) {
+            const overlay = messageContainer.querySelector('.absolute.inset-0');
+            if (overlay) {
+              overlay.className = 'absolute inset-0 ' + wallpaperClass;
+            }
+          }
+        });
+      });
+      
+      document.getElementById('close-wallpaper')?.addEventListener('click', () => {
+        document.getElementById('wallpaper-modal')?.remove();
+      });
+    }
+    
+    // Block/Unblock user
+    async function toggleBlockUser(userId, userName) {
+      const blockedKey = 'blocked_' + userId;
+      const isBlocked = localStorage.getItem(blockedKey) === 'true';
+      
+      if (isBlocked) {
+        // Unblock
+        if (confirm(`Unblock ${userName}?`)) {
+          localStorage.removeItem(blockedKey);
+          try {
+            await deleteDoc(doc(db, 'blockedUsers', state.user.uid + '_' + userId));
+          } catch (e) {}
+          alert(userName + ' has been unblocked.');
+        }
+      } else {
+        // Block
+        if (confirm(`Block ${userName}? They won't be able to message you.`)) {
+          localStorage.setItem(blockedKey, 'true');
+          try {
+            await setDoc(doc(db, 'blockedUsers', state.user.uid + '_' + userId), {
+              blockerId: state.user.uid,
+              blockedId: userId,
+              createdAt: serverTimestamp()
+            });
+          } catch (e) {}
+          alert(userName + ' has been blocked.');
+        }
+      }
+    }
+    
+    // Contact picker for sharing
+    function openContactPicker() {
+      const modalHtml = `
+        <div id="contact-picker-modal" class="fixed inset-0 z-[60] bg-black/80 flex items-center justify-center p-4">
+          <div class="bg-white rounded-2xl w-full max-w-md overflow-hidden shadow-2xl max-h-[80vh] flex flex-col">
+            <div class="p-4 border-b border-gray-200 flex items-center justify-between flex-shrink-0">
+              <h3 class="text-lg font-semibold text-black">Share Contact</h3>
+              <button id="close-contact-picker" class="p-2 text-gray-600 hover:text-black rounded-full hover:bg-gray-100 transition-colors">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+              </button>
+            </div>
+            <div class="p-2 border-b border-gray-200 flex-shrink-0">
+              <input type="text" id="contact-search" placeholder="Search contacts..." class="w-full bg-gray-100 text-black placeholder-gray-500 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-black">
+            </div>
+            <div id="contact-list" class="flex-1 overflow-y-auto p-2">
+              ${state.connections.length === 0 
+                ? '<p class="text-center text-gray-500 py-8">No contacts to share</p>'
+                : state.connections.map(contact => `
+                    <button class="contact-share-btn w-full flex items-center gap-3 p-3 rounded-lg hover:bg-gray-100 transition-colors text-left" data-id="${contact.id}" data-name="${contact.name}" data-email="${contact.email || ''}" data-avatar="${contact.avatar || ''}" data-location="${contact.location || ''}">
+                      <img src="${contact.avatar || `https://ui-avatars.com/api/?name=${contact.name}&background=333&color=fff`}" alt="${contact.name}" class="w-12 h-12 rounded-full object-cover">
+                      <div>
+                        <p class="font-medium text-black">${contact.name}</p>
+                        <p class="text-sm text-gray-500">${contact.email || contact.status || ''}</p>
+                      </div>
+                    </button>
+                  `).join('')
+              }
+            </div>
+          </div>
+        </div>
+      `;
+      document.body.insertAdjacentHTML('beforeend', modalHtml);
+      
+      // Filter contacts
+      document.getElementById('contact-search')?.addEventListener('input', (e) => {
+        const query = e.target.value.toLowerCase().trim();
+        document.querySelectorAll('.contact-share-btn').forEach(btn => {
+          const name = btn.dataset.name.toLowerCase();
+          btn.style.display = name.includes(query) ? 'flex' : 'none';
+        });
+      });
+      
+      // Share contact
+      document.querySelectorAll('.contact-share-btn').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          const contactData = {
+            id: btn.dataset.id,
+            name: btn.dataset.name,
+            email: btn.dataset.email,
+            avatar: btn.dataset.avatar,
+            location: btn.dataset.location
+          };
+          
+          document.getElementById('contact-picker-modal')?.remove();
+          
+          // Send contact as a special message
+          const contactMessage = `📇 Contact: ${contactData.name}${contactData.email ? '\\n' + contactData.email : ''}${contactData.location ? '\\n📍 ' + contactData.location : ''}`;
+          await sendMessage(contactMessage);
+          log('Contact shared: ' + contactData.name);
+        });
+      });
+      
+      document.getElementById('close-contact-picker')?.addEventListener('click', () => {
+        document.getElementById('contact-picker-modal')?.remove();
+      });
+    }
+
+    // Clear chat messages
+    async function clearChat(chatId) {
+      if (!chatId) return;
+      
+      log('Clearing chat: ' + chatId);
+      
+      try {
+        // Get all messages for this chat
+        const messagesQuery = query(
+          collection(db, 'messages'),
+          where('chatId', '==', chatId)
+        );
+        const snapshot = await getDocs(messagesQuery);
+        
+        // Delete each message
+        const deletePromises = snapshot.docs.map(doc => deleteDoc(doc.ref));
+        await Promise.all(deletePromises);
+        
+        // Clear local state
+        state.messages = [];
+        allMessages[chatId] = [];
+        localStorage.removeItem('linkup_msgs_' + chatId);
+        
+        // Update chat document
+        await updateDoc(doc(db, 'chats', chatId), {
+          lastMessage: '',
+          lastMessageTime: serverTimestamp(),
+          lastMessageSenderId: '',
+          lastMessageStatus: ''
+        });
+        
+        // Re-render messages
+        updateMessages();
+        
+        log('Chat cleared: ' + snapshot.docs.length + ' messages deleted');
+        alert('Chat cleared!');
+      } catch (err) {
+        log('Clear chat error: ' + err.message);
+        alert('Failed to clear chat: ' + err.message);
+      }
+    }
+    
     async function sendMessage(text) {
       if (!text.trim() || !state.selectedChatId || !state.user) {
         log('Cannot send message - missing text, chatId, or user');
@@ -2265,6 +3591,15 @@
       updateTabBadges();
     }
 
+    function updateChatRequestBadge() {
+      const badge = document.getElementById('chat-request-badge');
+      if (badge) {
+        const count = state.receivedRequests.length;
+        badge.textContent = count > 9 ? '9+' : count;
+        badge.classList.toggle('hidden', count === 0);
+      }
+    }
+    
     function updateTabBadges() {
       const circleBadge = document.getElementById('circle-badge');
       const requestsBadge = document.getElementById('requests-badge');
@@ -2329,29 +3664,29 @@
           : state.searchResults.map(user => {
               const status = getInviteStatus(user.id);
               return `
-                <div class="flex items-center justify-between p-3 rounded-lg hover:bg-gray-800 transition-colors ${user.sameLocation ? 'bg-gray-800/50 border border-gray-700' : ''}">
+                <div class="flex items-center justify-between p-3 rounded-lg hover:bg-gray-100 transition-colors ${user.sameLocation ? 'bg-gray-100 border border-gray-200' : ''}">
                   <div class="flex items-center gap-3">
                     <div class="relative">
                       <img src="${user.avatar || `https://ui-avatars.com/api/?name=${user.name}&background=333&color=fff`}" alt="${user.name}" class="w-12 h-12 rounded-full object-cover">
-                      ${user.sameLocation ? '<div class="absolute -bottom-1 -right-1 w-5 h-5 bg-white rounded-full flex items-center justify-center"><svg class="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" /></svg></div>' : ''}
+                      ${user.sameLocation ? '<div class="absolute -bottom-1 -right-1 w-5 h-5 bg-green-500 rounded-full flex items-center justify-center"><svg class="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" /></svg></div>' : ''}
                     </div>
                     <div>
-                      <h3 class="text-white font-medium">${user.name}</h3>
+                      <h3 class="text-black font-medium">${user.name}</h3>
                       ${user.location ? `
-                        <p class="text-gray-400 text-xs flex items-center gap-1">
+                        <p class="text-gray-600 text-xs flex items-center gap-1">
                           <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" /></svg>
                           ${user.location}
-                          ${user.sameLocation ? '<span class="text-white ml-1">• Near you</span>' : ''}
+                          ${user.sameLocation ? '<span class="text-green-600 ml-1 font-medium">• Near you</span>' : ''}
                         </p>
                       ` : `<p class="text-gray-500 text-sm">${user.email}</p>`}
                       ${user.bio ? `<p class="text-gray-500 text-xs mt-0.5 line-clamp-1">${user.bio}</p>` : ''}
                     </div>
                   </div>
                   ${status === 'connected' 
-                    ? '<span class="px-3 py-1 bg-gray-700 text-white rounded-full text-sm">Connected</span>'
+                    ? '<span class="px-3 py-1 bg-gray-200 text-black rounded-full text-sm">Connected</span>'
                     : status === 'pending'
-                    ? '<span class="px-3 py-1 bg-gray-600 text-gray-300 rounded-full text-sm">Pending</span>'
-                    : `<button class="send-invite-btn px-4 py-2 bg-white text-black rounded-lg text-sm font-medium hover:bg-gray-200 transition-colors" data-user-id="${user.id}">Invite</button>`
+                    ? '<span class="px-3 py-1 bg-gray-200 text-gray-600 rounded-full text-sm">Pending</span>'
+                    : `<button class="send-invite-btn px-4 py-2 bg-black text-white rounded-lg text-sm font-medium hover:bg-gray-800 transition-colors" data-user-id="${user.id}">Invite</button>`
                   }
                 </div>
               `;
@@ -2591,7 +3926,7 @@
       root.innerHTML = `
         <div class="h-screen bg-black flex overflow-hidden">
           <!-- Sidebar -->
-          <div id="sidebar" class="${state.showMobileChat ? 'hidden md:flex' : 'flex'} flex-col w-full md:w-80 lg:w-96 bg-black border-r border-gray-800 h-full flex-shrink-0">
+          <div id="sidebar" class="${state.showMobileChat ? 'hidden md:flex' : 'flex'} flex-col w-full md:w-80 lg:w-96 bg-black border-r border-gray-800 flex-shrink-0 sidebar-mobile">
             
             <!-- Header -->
             <div class="p-4 border-b border-gray-800">
@@ -2719,31 +4054,31 @@
           </div>
 
           <!-- Chat View -->
-          <div id="chat-view" class="flex-1 ${!state.showMobileChat ? 'hidden md:flex' : 'flex'} flex-col h-full bg-black">
+          <div id="chat-view" class="flex-1 ${!state.showMobileChat ? 'hidden md:flex' : 'flex'} flex-col bg-black chat-screen">
             ${selectedChat ? renderChatView(selectedChat, otherUser) : renderEmptyChatView()}
           </div>
         </div>
 
         <!-- User Search Modal -->
         <div id="user-search-modal" class="${state.showUserSearch ? '' : 'hidden'} fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
-          <div class="bg-gray-900 rounded-2xl w-full max-w-md max-h-[80vh] overflow-hidden">
-            <div class="p-4 border-b border-gray-800 flex items-center justify-between">
-              <h2 class="text-xl font-semibold text-white">Find People</h2>
-              <button id="close-search" class="w-8 h-8 rounded-full bg-gray-800 flex items-center justify-center text-gray-400 hover:text-white transition-colors">
+          <div class="bg-white rounded-2xl w-full max-w-md max-h-[80vh] overflow-hidden shadow-2xl">
+            <div class="p-4 border-b border-gray-200 flex items-center justify-between">
+              <h2 class="text-xl font-semibold text-black">Find People</h2>
+              <button id="close-search" class="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center text-gray-600 hover:text-black hover:bg-gray-200 transition-colors">
                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
                 </svg>
               </button>
             </div>
 
-            <form id="search-users-form" class="p-4">
+            <form id="search-users-form" class="p-4 bg-white">
               <div class="flex gap-2">
-                <input type="text" id="search-users-input" placeholder="Search by name or email..." class="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-4 py-2 text-white placeholder-gray-500 focus:outline-none focus:border-white transition-colors">
-                <button type="submit" class="px-4 py-2 bg-white text-black rounded-lg font-medium hover:bg-gray-200 transition-colors">Search</button>
+                <input type="text" id="search-users-input" placeholder="Search by name or email..." class="flex-1 bg-gray-100 border border-gray-300 rounded-lg px-4 py-2 text-black placeholder-gray-500 focus:outline-none focus:border-black focus:ring-2 focus:ring-black/20 transition-colors">
+                <button type="submit" class="px-4 py-2 bg-black text-white rounded-lg font-medium hover:bg-gray-800 transition-colors">Search</button>
               </div>
             </form>
 
-            <div id="search-results" class="overflow-y-auto max-h-96 px-4 pb-4">
+            <div id="search-results" class="overflow-y-auto max-h-96 px-4 pb-4 bg-white">
               <div class="text-center text-gray-500 py-8">Search for users by name or email</div>
             </div>
           </div>
@@ -2751,7 +4086,7 @@
 
         <!-- Request Modal -->
         <div id="request-modal" class="${state.showRequestModal ? '' : 'hidden'} fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
-          <div class="bg-gray-900 rounded-2xl w-full max-w-md max-h-[90vh] overflow-hidden flex flex-col">
+          <div id="request-modal-content" class="bg-white rounded-2xl w-full max-w-md max-h-[90vh] overflow-hidden flex flex-col shadow-2xl border border-gray-200">
             ${renderRequestModal()}
           </div>
         </div>
@@ -3304,6 +4639,7 @@
           const otherUser = selectedChat ? getOtherUser(selectedChat) : state.connections.find(c => c.id === userId);
           document.getElementById('chat-view').innerHTML = renderChatView(selectedChat || { id: state.selectedChatId, participants: [state.user.uid, userId] }, otherUser);
           attachChatViewListeners();
+          updateChatRequestBadge();
         });
       });
 
@@ -3408,13 +4744,28 @@
         document.getElementById('chat-view').innerHTML = renderEmptyChatView();
       });
 
-      // Message input - auto resize
+      // Message input - auto resize and toggle send/mic button
       const messageInput = document.getElementById('message-input');
+      const sendBtn = document.getElementById('send-btn');
+      const voiceBtn = document.getElementById('voice-note-btn');
+      
       if (messageInput) {
         messageInput.addEventListener('input', (e) => {
           // Auto resize
           e.target.style.height = 'auto';
           e.target.style.height = Math.min(e.target.scrollHeight, 128) + 'px';
+          
+          // Toggle send/mic button based on input content
+          const hasText = e.target.value.trim().length > 0;
+          if (sendBtn && voiceBtn) {
+            if (hasText) {
+              sendBtn.classList.remove('hidden');
+              voiceBtn.classList.add('hidden');
+            } else {
+              sendBtn.classList.add('hidden');
+              voiceBtn.classList.remove('hidden');
+            }
+          }
         });
         
         // Handle Enter key to send (Shift+Enter for new line)
@@ -3431,14 +4782,30 @@
         sendMessageFromInput();
       });
       
+      // Voice note button
+      document.getElementById('voice-note-btn')?.addEventListener('click', () => {
+        if (!isRecording) {
+          startVoiceRecording();
+        }
+      });
+      
       // Helper function to send message
       function sendMessageFromInput() {
         const input = document.getElementById('message-input');
+        const sendBtn = document.getElementById('send-btn');
+        const voiceBtn = document.getElementById('voice-note-btn');
+        
         if (input && input.value.trim()) {
           sendMessage(input.value);
           input.value = '';
           input.style.height = 'auto';
           input.focus();
+          
+          // Reset to show mic button after sending
+          if (sendBtn && voiceBtn) {
+            sendBtn.classList.add('hidden');
+            voiceBtn.classList.remove('hidden');
+          }
         }
       }
 
@@ -3486,6 +4853,28 @@
         }
       });
       
+      // Request from chat button
+      document.getElementById('request-from-chat-btn')?.addEventListener('click', () => {
+        log('Request from chat button clicked');
+        const selectedChat = state.chats.find(c => c.id === state.selectedChatId);
+        const otherUser = selectedChat ? getOtherUser(selectedChat) : null;
+        
+        if (otherUser) {
+          state.selectedRequestUser = {
+            id: otherUser.id,
+            name: otherUser.name,
+            avatar: otherUser.avatar || ''
+          };
+          state.selectedRequestType = null;
+          state.showRequestModal = true;
+          
+          document.getElementById('request-modal')?.classList.remove('hidden');
+          updateRequestModal();
+        } else {
+          alert('Cannot send request - user not found');
+        }
+      });
+      
       // Video call button
       document.getElementById('video-call-btn')?.addEventListener('click', () => {
         log('Video call button clicked');
@@ -3498,6 +4887,164 @@
           log('Cannot start call - no other user found');
           alert('Cannot start call - user not found');
         }
+      });
+      
+      // Attachment button - toggle menu
+      const attachmentBtn = document.getElementById('attachment-btn');
+      const attachmentMenu = document.getElementById('attachment-menu');
+      
+      attachmentBtn?.addEventListener('click', (e) => {
+        e.stopPropagation();
+        attachmentMenu?.classList.toggle('hidden');
+        // Close other menus
+        document.getElementById('more-options-menu')?.classList.add('hidden');
+      });
+      
+      // Attachment options
+      document.querySelectorAll('.attachment-option').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const type = btn.dataset.type;
+          log('Attachment option clicked: ' + type);
+          attachmentMenu?.classList.add('hidden');
+          
+          switch(type) {
+            case 'camera':
+              // Open camera (on mobile this opens camera, on desktop shows file picker)
+              const cameraInput = document.createElement('input');
+              cameraInput.type = 'file';
+              cameraInput.accept = 'image/*';
+              cameraInput.capture = 'environment';
+              cameraInput.onchange = (e) => handleAttachmentFile(e.target.files[0], 'image');
+              cameraInput.click();
+              break;
+            case 'gallery':
+              document.getElementById('attachment-gallery-input')?.click();
+              break;
+            case 'document':
+              document.getElementById('attachment-document-input')?.click();
+              break;
+            case 'location':
+              handleShareLocation();
+              break;
+            case 'contact':
+              openContactPicker();
+              break;
+            case 'audio':
+              document.getElementById('attachment-audio-input')?.click();
+              break;
+          }
+        });
+      });
+      
+      // File input handlers
+      document.getElementById('attachment-gallery-input')?.addEventListener('change', (e) => {
+        const files = e.target.files;
+        if (files.length > 0) {
+          for (let file of files) {
+            handleAttachmentFile(file, 'media');
+          }
+        }
+        e.target.value = '';
+      });
+      
+      document.getElementById('attachment-document-input')?.addEventListener('change', async (e) => {
+        const file = e.target.files[0];
+        if (file) {
+          // Check file size (max 500KB for Firestore)
+          if (file.size > 500 * 1024) {
+            alert('Document too large! Maximum size is 500KB. Please use a smaller file or compress it.');
+            e.target.value = '';
+            return;
+          }
+          
+          // Convert to Base64 and send
+          const reader = new FileReader();
+          reader.onload = async () => {
+            const base64 = reader.result;
+            const fileName = file.name;
+            const fileSize = file.size;
+            const fileType = file.type || 'application/octet-stream';
+            const fileExt = fileName.split('.').pop().toLowerCase();
+            
+            await sendDocumentMessage(fileName, base64, fileSize, fileType, fileExt);
+          };
+          reader.onerror = () => {
+            alert('Error reading file. Please try again.');
+          };
+          reader.readAsDataURL(file);
+        }
+        e.target.value = '';
+      });
+      
+      document.getElementById('attachment-audio-input')?.addEventListener('change', (e) => {
+        const file = e.target.files[0];
+        if (file) {
+          handleAttachmentFile(file, 'audio');
+        }
+        e.target.value = '';
+      });
+      
+      // More options button - toggle menu
+      const moreOptionsBtn = document.getElementById('more-options-btn');
+      const moreOptionsMenu = document.getElementById('more-options-menu');
+      
+      moreOptionsBtn?.addEventListener('click', (e) => {
+        e.stopPropagation();
+        moreOptionsMenu?.classList.toggle('hidden');
+        // Close other menus
+        attachmentMenu?.classList.add('hidden');
+      });
+      
+      // More options actions
+      document.querySelectorAll('.more-option').forEach(btn => {
+        btn.addEventListener('click', async (e) => {
+          e.stopPropagation();
+          const action = btn.dataset.action;
+          log('More option clicked: ' + action);
+          moreOptionsMenu?.classList.add('hidden');
+          
+          const selectedChat = state.chats.find(c => c.id === state.selectedChatId);
+          const otherUser = selectedChat ? getOtherUser(selectedChat) : null;
+          
+          switch(action) {
+            case 'view-contact':
+              if (otherUser) {
+                alert(`Contact: ${otherUser.name}\nEmail: ${otherUser.email || 'N/A'}\nLocation: ${otherUser.location || 'N/A'}\nBio: ${otherUser.bio || 'N/A'}`);
+              }
+              break;
+            case 'search':
+              openSearchInChat();
+              break;
+            case 'mute':
+              openMuteOptions();
+              break;
+            case 'wallpaper':
+              openWallpaperPicker();
+              break;
+            case 'clear-chat':
+              if (confirm('Clear all messages in this chat? This cannot be undone.')) {
+                await clearChat(state.selectedChatId);
+              }
+              break;
+            case 'block':
+              if (otherUser) {
+                await toggleBlockUser(otherUser.id, otherUser.name);
+              }
+              break;
+            case 'report':
+              if (confirm('Report this conversation for abuse?')) {
+                alert('Report submitted. Thank you for helping keep LinkUP safe.');
+              }
+              break;
+          }
+        });
+      });
+      
+      // Close menus when clicking elsewhere
+      document.addEventListener('click', () => {
+        attachmentMenu?.classList.add('hidden');
+        moreOptionsMenu?.classList.add('hidden');
       });
     }
 
@@ -3768,22 +5315,22 @@
       // Section 1: Send Requests to Connections
       html += `
         <div class="border-b border-gray-800">
-          <div class="px-4 py-3 bg-white flex items-center justify-between">
+          <div class="px-4 py-3 bg-white border-b border-gray-200 flex items-center justify-between">
             <h3 class="text-sm font-semibold text-black uppercase tracking-wider">Send a Request</h3>
             ${hasConnections ? `<span class="text-xs text-gray-500">${state.connections.length} connection${state.connections.length > 1 ? 's' : ''}</span>` : ''}
           </div>
           ${hasConnections ? `
-            <div class="p-3 space-y-2">
+            <div class="p-3 space-y-2 bg-white">
               ${state.connections.map(user => `
-                <div class="flex items-center justify-between p-3 rounded-lg bg-gray-900/30 hover:bg-gray-800/50 transition-colors">
+                <div class="flex items-center justify-between p-3 rounded-lg bg-white hover:bg-gray-100 transition-colors border border-gray-200">
                   <div class="flex items-center gap-3">
                     <div class="relative">
                       <img src="${user.avatar || `https://ui-avatars.com/api/?name=${user.name}&background=333&color=fff`}" alt="${user.name}" class="w-10 h-10 rounded-full object-cover">
                       ${user.isOnline ? '<div class="absolute bottom-0 right-0 w-2.5 h-2.5 bg-white rounded-full border-2 border-gray-900"></div>' : ''}
                     </div>
                     <div>
-                      <span class="text-white font-medium block">${user.name}</span>
-                      <span class="text-gray-500 text-xs">${user.isOnline ? 'Online' : 'Offline'}</span>
+                      <span class="text-black font-medium block">${user.name}</span>
+                      <span class="text-gray-600 text-xs">${user.isOnline ? 'Online' : 'Offline'}</span>
                     </div>
                   </div>
                   <button class="open-request-modal px-3 py-1.5 bg-white text-black rounded-lg text-sm font-medium hover:bg-gray-200 transition-colors flex items-center gap-1" data-user-id="${user.id}" data-user-name="${user.name}" data-user-avatar="${user.avatar || ''}">
@@ -3815,23 +5362,23 @@
             <h3 class="text-sm font-semibold text-black uppercase tracking-wider">Incoming Requests</h3>
           </div>
           ${hasReceivedRequests ? `
-            <div class="divide-y divide-gray-800">
+            <div class="divide-y divide-gray-200 bg-white">
               ${state.receivedRequests.map(req => {
                 const typeConfig = REQUEST_TYPES[req.type] || REQUEST_TYPES.special;
                 return `
-                  <div class="p-4 hover:bg-gray-900/50 transition-colors">
+                  <div class="p-4 hover:bg-gray-100 transition-colors">
                     <div class="flex items-start gap-3">
                       <img src="${req.fromAvatar || `https://ui-avatars.com/api/?name=${req.fromName}&background=333&color=fff`}" alt="${req.fromName}" class="w-10 h-10 rounded-full object-cover flex-shrink-0">
                       <div class="flex-1 min-w-0">
                         <div class="flex items-center gap-2 mb-1">
-                          <span class="text-white font-medium">${req.fromName}</span>
-                          <span class="text-gray-600">•</span>
-                          <span class="text-gray-400 text-sm flex items-center gap-1">
+                          <span class="text-black font-medium">${req.fromName}</span>
+                          <span class="text-gray-400">•</span>
+                          <span class="text-gray-600 text-sm flex items-center gap-1">
                             ${typeConfig.icon.replace('w-6 h-6', 'w-4 h-4')}
                             ${typeConfig.name}
                           </span>
                         </div>
-                        <div class="bg-gray-900 rounded-lg p-3 mb-3">
+                        <div class="bg-gray-100 rounded-lg p-3 mb-3 border border-gray-200">
                           ${renderRequestDetails(req)}
                         </div>
                         <div class="flex gap-2">
@@ -3903,44 +5450,44 @@
     function renderRequestModal() {
       if (!state.selectedRequestUser) {
         return `
-          <div class="p-4 border-b border-gray-800 flex items-center justify-between">
-            <h2 class="text-xl font-semibold text-white">Send Request</h2>
-            <button id="close-request-modal" class="w-8 h-8 rounded-full bg-gray-800 flex items-center justify-center text-gray-400 hover:text-white transition-colors">
+          <div class="p-4 border-b border-gray-200 flex items-center justify-between">
+            <h2 class="text-xl font-semibold text-black">Send Request</h2>
+            <button id="close-request-modal" class="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center text-gray-600 hover:text-black hover:bg-gray-200 transition-colors">
               <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
               </svg>
             </button>
           </div>
-          <div class="p-8 text-center text-gray-500">No user selected</div>
+          <div class="p-8 text-center text-gray-500 bg-white">No user selected</div>
         `;
       }
 
       // Step 1: Select request type
       if (!state.selectedRequestType) {
         return `
-          <div class="p-4 border-b border-gray-800 flex items-center justify-between">
+          <div class="p-4 border-b border-gray-200 flex items-center justify-between">
             <div class="flex items-center gap-3">
               <img src="${state.selectedRequestUser.avatar || `https://ui-avatars.com/api/?name=${state.selectedRequestUser.name}&background=333&color=fff`}" alt="${state.selectedRequestUser.name}" class="w-10 h-10 rounded-full">
               <div>
-                <h2 class="text-lg font-semibold text-white">Send Request</h2>
-                <p class="text-sm text-gray-400">to ${state.selectedRequestUser.name}</p>
+                <h2 class="text-lg font-semibold text-black">Send Request</h2>
+                <p class="text-sm text-gray-600">to ${state.selectedRequestUser.name}</p>
               </div>
             </div>
-            <button id="close-request-modal" class="w-8 h-8 rounded-full bg-gray-800 flex items-center justify-center text-gray-400 hover:text-white transition-colors">
+            <button id="close-request-modal" class="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center text-gray-600 hover:text-black hover:bg-gray-200 transition-colors">
               <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
               </svg>
             </button>
           </div>
-          <div class="p-4 overflow-y-auto flex-1">
-            <p class="text-gray-400 text-sm mb-4">Select a request type:</p>
+          <div class="p-4 overflow-y-auto flex-1 bg-white">
+            <p class="text-gray-600 text-sm mb-4">Select a request type:</p>
             <div class="grid grid-cols-2 gap-3">
               ${Object.entries(REQUEST_TYPES).map(([key, config]) => `
-                <button class="select-request-type flex flex-col items-center gap-2 p-4 rounded-xl bg-gray-800 hover:bg-gray-700 transition-colors border border-gray-700 hover:border-white" data-type="${key}">
-                  <div class="w-12 h-12 rounded-full bg-gray-900 flex items-center justify-center text-white">
+                <button class="select-request-type flex flex-col items-center gap-2 p-4 rounded-xl bg-gray-100 hover:bg-gray-200 transition-colors border border-gray-200 hover:border-gray-400" data-type="${key}">
+                  <div class="w-12 h-12 rounded-full bg-gray-200 flex items-center justify-center text-black">
                     ${config.icon}
                   </div>
-                  <span class="text-white text-sm font-medium text-center">${config.name.replace(' Request', '')}</span>
+                  <span class="text-black text-sm font-medium text-center">${config.name.replace(' Request', '')}</span>
                 </button>
               `).join('')}
             </div>
@@ -3951,38 +5498,38 @@
       // Step 2: Fill in request details
       const typeConfig = REQUEST_TYPES[state.selectedRequestType];
       return `
-        <div class="p-4 border-b border-gray-800 flex items-center justify-between">
+        <div class="p-4 border-b border-gray-200 flex items-center justify-between">
           <div class="flex items-center gap-3">
-            <button id="back-to-types" class="w-8 h-8 rounded-full bg-gray-800 flex items-center justify-center text-gray-400 hover:text-white transition-colors">
+            <button id="back-to-types" class="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center text-gray-600 hover:text-black hover:bg-gray-200 transition-colors">
               <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
               </svg>
             </button>
             <div>
-              <h2 class="text-lg font-semibold text-white">${typeConfig.name}</h2>
-              <p class="text-sm text-gray-400">to ${state.selectedRequestUser.name}</p>
+              <h2 class="text-lg font-semibold text-black">${typeConfig.name}</h2>
+              <p class="text-sm text-gray-600">to ${state.selectedRequestUser.name}</p>
             </div>
           </div>
-          <button id="close-request-modal" class="w-8 h-8 rounded-full bg-gray-800 flex items-center justify-center text-gray-400 hover:text-white transition-colors">
+          <button id="close-request-modal" class="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center text-gray-600 hover:text-black hover:bg-gray-200 transition-colors">
             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
             </svg>
           </button>
         </div>
-        <form id="request-form" class="p-4 overflow-y-auto flex-1 space-y-4">
+        <form id="request-form" class="p-4 overflow-y-auto flex-1 space-y-4 bg-white">
           ${typeConfig.fields.map(field => {
             if (field.type === 'textarea') {
               return `
                 <div>
-                  <label class="block text-gray-400 text-sm mb-2">${field.label}${field.required ? ' *' : ''}</label>
-                  <textarea name="${field.name}" placeholder="${field.placeholder || ''}" class="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:border-white transition-colors resize-none h-24" ${field.required ? 'required' : ''}></textarea>
+                  <label class="block text-gray-700 text-sm mb-2">${field.label}${field.required ? ' *' : ''}</label>
+                  <textarea name="${field.name}" placeholder="${field.placeholder || ''}" class="w-full bg-gray-100 border border-gray-300 rounded-lg px-4 py-3 text-black placeholder-gray-500 focus:outline-none focus:border-black focus:ring-1 focus:ring-black transition-colors resize-none h-24" ${field.required ? 'required' : ''}></textarea>
                 </div>
               `;
             } else if (field.type === 'select') {
               return `
                 <div>
-                  <label class="block text-gray-400 text-sm mb-2">${field.label}${field.required ? ' *' : ''}</label>
-                  <select name="${field.name}" class="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-white transition-colors" ${field.required ? 'required' : ''}>
+                  <label class="block text-gray-700 text-sm mb-2">${field.label}${field.required ? ' *' : ''}</label>
+                  <select name="${field.name}" class="w-full bg-gray-100 border border-gray-300 rounded-lg px-4 py-3 text-black focus:outline-none focus:border-black focus:ring-1 focus:ring-black transition-colors" ${field.required ? 'required' : ''}>
                     <option value="">Select an option</option>
                     ${field.options.map(opt => `<option value="${opt}">${opt}</option>`).join('')}
                   </select>
@@ -3991,24 +5538,24 @@
             } else {
               return `
                 <div>
-                  <label class="block text-gray-400 text-sm mb-2">${field.label}${field.required ? ' *' : ''}</label>
-                  <input type="${field.type}" name="${field.name}" placeholder="${field.placeholder || ''}" class="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:border-white transition-colors" ${field.required ? 'required' : ''}>
+                  <label class="block text-gray-700 text-sm mb-2">${field.label}${field.required ? ' *' : ''}</label>
+                  <input type="${field.type}" name="${field.name}" placeholder="${field.placeholder || ''}" class="w-full bg-gray-100 border border-gray-300 rounded-lg px-4 py-3 text-black placeholder-gray-500 focus:outline-none focus:border-black focus:ring-1 focus:ring-black transition-colors" ${field.required ? 'required' : ''}>
                 </div>
               `;
             }
           }).join('')}
         </form>
-        <div class="p-4 border-t border-gray-800 flex gap-3">
-          <button id="cancel-request" class="flex-1 py-3 rounded-lg bg-gray-800 text-white font-medium hover:bg-gray-700 transition-colors">Cancel</button>
-          <button id="submit-request" class="flex-1 py-3 rounded-lg bg-white text-black font-medium hover:bg-gray-200 transition-colors">Send Request</button>
+        <div class="p-4 border-t border-gray-200 flex gap-3 bg-white">
+          <button id="cancel-request" class="flex-1 py-3 rounded-lg bg-gray-200 text-black font-medium hover:bg-gray-300 transition-colors">Cancel</button>
+          <button id="submit-request" class="flex-1 py-3 rounded-lg bg-black text-white font-medium hover:bg-gray-800 transition-colors">Send Request</button>
         </div>
       `;
     }
 
     function updateRequestModal() {
-      const modal = document.getElementById('request-modal');
-      if (modal) {
-        modal.querySelector('.bg-gray-900').innerHTML = renderRequestModal();
+      const container = document.getElementById('request-modal-content');
+      if (container) {
+        container.innerHTML = renderRequestModal();
         attachRequestModalListeners();
       }
     }
@@ -4287,7 +5834,7 @@
       
       return `
         <!-- Chat Header - WhatsApp Style -->
-        <div class="h-16 bg-white border-b border-gray-200 flex items-center px-3 gap-3 flex-shrink-0">
+        <div class="chat-header-mobile bg-white border-b border-gray-200 flex items-center px-3 gap-3">
           <button id="back-btn" class="p-2 -ml-2 text-gray-600 hover:text-black transition-colors md:hidden">
             <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
@@ -4319,6 +5866,14 @@
           </div>
 
           <div class="flex items-center gap-1">
+            <div class="relative">
+              <button id="request-from-chat-btn" class="p-2.5 text-gray-600 hover:text-black hover:bg-gray-100 active:bg-gray-200 active:scale-95 transition-all rounded-full" title="Send Request">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+                </svg>
+              </button>
+              <span id="chat-request-badge" class="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] font-bold rounded-full min-w-[18px] h-[18px] flex items-center justify-center hidden"></span>
+            </div>
             <button id="video-call-btn" class="p-2.5 text-gray-600 hover:text-black hover:bg-gray-100 active:bg-gray-200 active:scale-95 transition-all rounded-full" title="Video call">
               <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
@@ -4329,21 +5884,70 @@
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
               </svg>
             </button>
-            <button id="more-options-btn" class="p-2.5 text-gray-600 hover:text-black hover:bg-gray-100 active:bg-gray-200 active:scale-95 transition-all rounded-full" title="More options">
-              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z" />
-              </svg>
-            </button>
+            <div class="relative">
+              <button id="more-options-btn" class="p-2.5 text-gray-600 hover:text-black hover:bg-gray-100 active:bg-gray-200 active:scale-95 transition-all rounded-full" title="More options">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z" />
+                </svg>
+              </button>
+              <!-- More Options Menu -->
+              <div id="more-options-menu" class="hidden absolute top-12 right-0 bg-white rounded-xl shadow-xl border border-gray-200 py-2 z-50 min-w-[180px]">
+                <button class="more-option w-full flex items-center gap-3 px-4 py-2.5 text-left text-gray-700 hover:bg-gray-100 transition-colors" data-action="view-contact">
+                  <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                  </svg>
+                  <span class="text-sm">View Contact</span>
+                </button>
+                <button class="more-option w-full flex items-center gap-3 px-4 py-2.5 text-left text-gray-700 hover:bg-gray-100 transition-colors" data-action="search">
+                  <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                  </svg>
+                  <span class="text-sm">Search</span>
+                </button>
+                <button class="more-option w-full flex items-center gap-3 px-4 py-2.5 text-left text-gray-700 hover:bg-gray-100 transition-colors" data-action="mute">
+                  <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2" />
+                  </svg>
+                  <span class="text-sm">Mute</span>
+                </button>
+                <button class="more-option w-full flex items-center gap-3 px-4 py-2.5 text-left text-gray-700 hover:bg-gray-100 transition-colors" data-action="wallpaper">
+                  <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                  </svg>
+                  <span class="text-sm">Wallpaper</span>
+                </button>
+                <div class="my-1 border-t border-gray-200"></div>
+                <button class="more-option w-full flex items-center gap-3 px-4 py-2.5 text-left text-gray-700 hover:bg-gray-100 transition-colors" data-action="clear-chat">
+                  <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                  </svg>
+                  <span class="text-sm">Clear Chat</span>
+                </button>
+                <button class="more-option w-full flex items-center gap-3 px-4 py-2.5 text-left text-red-600 hover:bg-red-50 transition-colors" data-action="block">
+                  <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
+                  </svg>
+                  <span class="text-sm">Block</span>
+                </button>
+                <button class="more-option w-full flex items-center gap-3 px-4 py-2.5 text-left text-red-600 hover:bg-red-50 transition-colors" data-action="report">
+                  <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                  </svg>
+                  <span class="text-sm">Report</span>
+                </button>
+              </div>
+            </div>
           </div>
         </div>
 
         <!-- Messages Container -->
-        <div class="flex-1 relative overflow-hidden">
+        <div class="chat-messages-mobile relative">
           <!-- Chat wallpaper/pattern (optional subtle pattern) -->
           <div class="absolute inset-0 bg-black opacity-95"></div>
           
           <!-- Messages -->
-          <div id="message-list" class="relative h-full overflow-y-auto px-3 py-2">
+          <div id="message-list" class="h-full overflow-y-auto px-3 py-2" style="-webkit-overflow-scrolling: touch;">
             ${renderMessageList()}
           </div>
           
@@ -4357,14 +5961,75 @@
         </div>
 
         <!-- Message Input - WhatsApp Style -->
-        <div class="bg-white border-t border-gray-200 p-2 flex-shrink-0">
+        <div class="chat-input-mobile bg-white border-t border-gray-200 p-2">
           <div class="flex items-end gap-2">
-            <!-- Attachment button -->
-            <button type="button" id="attachment-btn" class="p-2.5 text-gray-600 hover:text-black hover:bg-gray-100 active:bg-gray-200 active:scale-95 transition-all rounded-full flex-shrink-0" title="Attach file">
-              <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
-              </svg>
-            </button>
+            <!-- Attachment button with menu -->
+            <div class="relative">
+              <button type="button" id="attachment-btn" class="p-2.5 text-gray-600 hover:text-black hover:bg-gray-100 active:bg-gray-200 active:scale-95 transition-all rounded-full flex-shrink-0" title="Attach file">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
+                </svg>
+              </button>
+              <!-- Attachment Menu -->
+              <div id="attachment-menu" class="hidden absolute bottom-14 left-0 bg-white rounded-2xl shadow-xl border border-gray-200 p-3 z-50 min-w-[200px]">
+                <div class="grid grid-cols-3 gap-2">
+                  <button class="attachment-option flex flex-col items-center gap-1.5 p-3 rounded-xl hover:bg-gray-100 transition-colors" data-type="camera">
+                    <div class="w-12 h-12 rounded-full bg-gradient-to-br from-pink-500 to-red-500 flex items-center justify-center">
+                      <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+                      </svg>
+                    </div>
+                    <span class="text-xs text-gray-700 font-medium">Camera</span>
+                  </button>
+                  <button class="attachment-option flex flex-col items-center gap-1.5 p-3 rounded-xl hover:bg-gray-100 transition-colors" data-type="gallery">
+                    <div class="w-12 h-12 rounded-full bg-gradient-to-br from-purple-500 to-indigo-500 flex items-center justify-center">
+                      <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                      </svg>
+                    </div>
+                    <span class="text-xs text-gray-700 font-medium">Gallery</span>
+                  </button>
+                  <button class="attachment-option flex flex-col items-center gap-1.5 p-3 rounded-xl hover:bg-gray-100 transition-colors" data-type="document">
+                    <div class="w-12 h-12 rounded-full bg-gradient-to-br from-blue-500 to-cyan-500 flex items-center justify-center">
+                      <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                      </svg>
+                    </div>
+                    <span class="text-xs text-gray-700 font-medium">Document</span>
+                  </button>
+                  <button class="attachment-option flex flex-col items-center gap-1.5 p-3 rounded-xl hover:bg-gray-100 transition-colors" data-type="location">
+                    <div class="w-12 h-12 rounded-full bg-gradient-to-br from-green-500 to-emerald-500 flex items-center justify-center">
+                      <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                      </svg>
+                    </div>
+                    <span class="text-xs text-gray-700 font-medium">Location</span>
+                  </button>
+                  <button class="attachment-option flex flex-col items-center gap-1.5 p-3 rounded-xl hover:bg-gray-100 transition-colors" data-type="contact">
+                    <div class="w-12 h-12 rounded-full bg-gradient-to-br from-orange-500 to-amber-500 flex items-center justify-center">
+                      <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                      </svg>
+                    </div>
+                    <span class="text-xs text-gray-700 font-medium">Contact</span>
+                  </button>
+                  <button class="attachment-option flex flex-col items-center gap-1.5 p-3 rounded-xl hover:bg-gray-100 transition-colors" data-type="audio">
+                    <div class="w-12 h-12 rounded-full bg-gradient-to-br from-rose-500 to-pink-500 flex items-center justify-center">
+                      <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
+                      </svg>
+                    </div>
+                    <span class="text-xs text-gray-700 font-medium">Audio</span>
+                  </button>
+                </div>
+              </div>
+              <!-- Hidden file inputs -->
+              <input type="file" id="attachment-gallery-input" accept="image/*,video/*" class="hidden" multiple>
+              <input type="file" id="attachment-document-input" accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt" class="hidden">
+              <input type="file" id="attachment-audio-input" accept="audio/*" class="hidden">
+            </div>
             
             <!-- Input container -->
             <form id="message-form" class="flex-1 flex items-end gap-2 bg-gray-100 rounded-3xl px-4 py-1">
@@ -4377,10 +6042,17 @@
               <textarea id="message-input" placeholder="Message" rows="1" autocomplete="off" class="flex-1 bg-transparent text-black placeholder-gray-500 py-2 focus:outline-none resize-none max-h-32 text-[15px]" style="min-height: 24px;"></textarea>
             </form>
             
-            <!-- Send / Voice button -->
-            <button type="button" id="send-btn" class="p-3 bg-black text-white rounded-full hover:bg-gray-800 hover:scale-105 active:scale-95 transition-all flex-shrink-0 shadow-lg" title="Send message">
+            <!-- Send / Voice button (only one shows at a time) -->
+            <button type="button" id="send-btn" class="hidden p-3 bg-black text-white rounded-full hover:bg-gray-800 hover:scale-105 active:scale-95 transition-all flex-shrink-0 shadow-lg" title="Send message">
               <svg id="send-icon" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+              </svg>
+            </button>
+            
+            <!-- Voice Note button (shows when no text) -->
+            <button type="button" id="voice-note-btn" class="p-3 bg-black text-white rounded-full hover:bg-gray-800 hover:scale-105 active:scale-95 transition-all flex-shrink-0 shadow-lg" title="Record voice note">
+              <svg id="mic-icon" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
               </svg>
             </button>
           </div>
@@ -4445,6 +6117,217 @@
               
               // Message status icons
               const statusIcon = isMe ? getMessageStatusIcon(msg.status) : '';
+              
+              // Check if message has an image or voice note
+              const hasImage = msg.imageUrl || msg.type === 'image';
+              const hasVoice = msg.audioUrl || msg.type === 'voice';
+              
+              // Check if message is a document
+              const hasDocument = msg.documentUrl || msg.type === 'document';
+              
+              if (hasDocument) {
+                // Document message - WhatsApp style
+                const fileName = msg.documentName || msg.text || 'Document';
+                const fileSize = msg.documentSize || 0;
+                const fileExt = msg.documentExt || fileName.split('.').pop().toLowerCase() || 'file';
+                const documentUrl = msg.documentUrl || '';
+                
+                // Format file size
+                const formatSize = (bytes) => {
+                  if (!bytes) return '';
+                  if (bytes < 1024) return bytes + ' B';
+                  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+                  return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+                };
+                
+                // Get icon based on file extension
+                const getDocIcon = (ext) => {
+                  const icons = {
+                    pdf: { color: 'text-red-400', bg: 'bg-red-500/20' },
+                    doc: { color: 'text-blue-400', bg: 'bg-blue-500/20' },
+                    docx: { color: 'text-blue-400', bg: 'bg-blue-500/20' },
+                    xls: { color: 'text-green-400', bg: 'bg-green-500/20' },
+                    xlsx: { color: 'text-green-400', bg: 'bg-green-500/20' },
+                    ppt: { color: 'text-orange-400', bg: 'bg-orange-500/20' },
+                    pptx: { color: 'text-orange-400', bg: 'bg-orange-500/20' },
+                    txt: { color: 'text-gray-400', bg: 'bg-gray-500/20' },
+                    zip: { color: 'text-yellow-400', bg: 'bg-yellow-500/20' },
+                    rar: { color: 'text-purple-400', bg: 'bg-purple-500/20' }
+                  };
+                  return icons[ext] || { color: 'text-gray-400', bg: 'bg-gray-500/20' };
+                };
+                
+                const docStyle = getDocIcon(fileExt);
+                
+                return `
+                  <div class="flex ${isMe ? 'justify-end' : 'justify-start'} ${isFirstInGroup ? 'mt-2' : ''} px-2" data-msg-id="${msg.id}">
+                    <div class="${isMe ? 'bg-white' : 'bg-gray-800'} rounded-2xl ${isLastInGroup ? (isMe ? 'rounded-br-md' : 'rounded-bl-md') : ''} overflow-hidden shadow-sm" style="min-width: 250px; max-width: 300px;">
+                      <div class="p-3">
+                        <div class="flex items-center gap-3">
+                          <!-- File icon -->
+                          <div class="w-12 h-12 ${docStyle.bg} rounded-lg flex items-center justify-center flex-shrink-0">
+                            <svg class="w-7 h-7 ${docStyle.color}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                            </svg>
+                          </div>
+                          
+                          <!-- File info -->
+                          <div class="flex-1 min-w-0">
+                            <p class="${isMe ? 'text-black' : 'text-white'} font-medium text-sm truncate">${fileName}</p>
+                            <p class="${isMe ? 'text-gray-500' : 'text-gray-400'} text-xs flex items-center gap-2">
+                              <span class="uppercase">${fileExt}</span>
+                              ${fileSize ? `<span>• ${formatSize(fileSize)}</span>` : ''}
+                            </p>
+                          </div>
+                          
+                          <!-- Download button -->
+                          ${documentUrl ? `
+                            <button onclick="downloadDocument('${documentUrl}', '${fileName}')" 
+                                    class="w-10 h-10 rounded-full ${isMe ? 'bg-black text-white hover:bg-gray-800' : 'bg-white text-black hover:bg-gray-200'} flex items-center justify-center transition-colors flex-shrink-0"
+                                    title="Download">
+                              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/>
+                              </svg>
+                            </button>
+                          ` : ''}
+                        </div>
+                        
+                        <!-- Time and status -->
+                        <div class="flex items-center justify-end gap-1 mt-2">
+                          <span class="text-[10px] ${isMe ? 'text-gray-500' : 'text-gray-400'}">${formatMessageTime(msg.timestamp)}</span>
+                          ${isMe ? statusIcon : ''}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                `;
+              }
+              
+              if (hasVoice) {
+                // Voice note message - WhatsApp style
+                const duration = msg.audioDuration || 0;
+                const durationStr = formatVoiceDuration(duration);
+                
+                return `
+                  <div class="flex ${isMe ? 'justify-end' : 'justify-start'} ${isFirstInGroup ? 'mt-2' : ''} px-2">
+                    <div class="relative ${isMe ? 'bg-white' : 'bg-gray-800'} rounded-2xl ${isLastInGroup ? (isMe ? 'rounded-br-md' : 'rounded-bl-md') : ''} shadow-sm overflow-hidden" style="min-width: 250px; max-width: 300px;">
+                      <div class="flex items-center gap-3 p-2">
+                        <!-- Play button -->
+                        <button id="voice-play-${msg.id}" 
+                                onclick="playVoiceNote('${msg.audioUrl}', '${msg.id}')"
+                                class="w-12 h-12 rounded-full ${isMe ? 'bg-black text-white' : 'bg-white text-black'} flex items-center justify-center flex-shrink-0 hover:opacity-80 transition-opacity">
+                          <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
+                            <path d="M8 5v14l11-7z"/>
+                          </svg>
+                        </button>
+                        
+                        <!-- Waveform and progress -->
+                        <div class="flex-1">
+                          <div class="relative h-8 flex items-center">
+                            <!-- Waveform bars -->
+                            <div class="flex items-center gap-0.5 w-full">
+                              ${Array(25).fill(0).map(() => 
+                                `<div class="w-1 ${isMe ? 'bg-gray-300' : 'bg-gray-600'} rounded-full" style="height: ${Math.random() * 20 + 4}px;"></div>`
+                              ).join('')}
+                            </div>
+                            <!-- Progress overlay -->
+                            <div class="absolute inset-0 overflow-hidden">
+                              <div id="voice-progress-${msg.id}" class="h-full flex items-center gap-0.5" style="width: 0%;">
+                                ${Array(25).fill(0).map(() => 
+                                  `<div class="w-1 ${isMe ? 'bg-gray-700' : 'bg-white'} rounded-full" style="height: ${Math.random() * 20 + 4}px;"></div>`
+                                ).join('')}
+                              </div>
+                            </div>
+                          </div>
+                          <!-- Duration -->
+                          <div class="flex items-center justify-between mt-1">
+                            <span id="voice-time-${msg.id}" class="text-xs ${isMe ? 'text-gray-500' : 'text-gray-400'}">${durationStr}</span>
+                            <div class="flex items-center gap-1">
+                              <span class="text-[10px] ${isMe ? 'text-gray-500' : 'text-gray-400'}">${formatMessageTime(msg.timestamp)}</span>
+                              ${isMe ? statusIcon : ''}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                `;
+              }
+              
+              if (hasImage) {
+                // Clean WhatsApp-style image message
+                const imageCaption = msg.text || '';
+                const escapedCaption = imageCaption.replace(/'/g, "\\'").replace(/"/g, '\\"');
+                
+                // Check if imageUrl is valid Base64 or URL
+                const imageUrl = msg.imageUrl || '';
+                const isValidImage = imageUrl.startsWith('data:image') || imageUrl.startsWith('http');
+                
+                if (!isValidImage) {
+                  // Show placeholder for invalid/truncated images
+                  return `
+                    <div class="flex ${isMe ? 'justify-end' : 'justify-start'} ${isFirstInGroup ? 'mt-2' : ''} px-2">
+                      <div class="${isMe ? 'bg-white' : 'bg-gray-800'} rounded-2xl ${isLastInGroup ? (isMe ? 'rounded-br-md' : 'rounded-bl-md') : ''} overflow-hidden shadow-sm" style="max-width: 280px; min-width: 200px;">
+                        <div class="p-4 text-center">
+                          <svg class="w-12 h-12 mx-auto mb-2 ${isMe ? 'text-gray-400' : 'text-gray-500'}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                          </svg>
+                          <p class="${isMe ? 'text-gray-500' : 'text-gray-400'} text-sm">📷 Photo</p>
+                          ${imageCaption ? `<p class="${isMe ? 'text-gray-600' : 'text-gray-500'} text-xs mt-1">${imageCaption}</p>` : ''}
+                          <div class="flex items-center justify-end gap-1 mt-2">
+                            <span class="text-[10px] ${isMe ? 'text-gray-500' : 'text-gray-400'}">${formatMessageTime(msg.timestamp)}</span>
+                            ${isMe ? statusIcon : ''}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  `;
+                }
+                
+                return `
+                  <div class="flex ${isMe ? 'justify-end' : 'justify-start'} ${isFirstInGroup ? 'mt-2' : ''} px-2">
+                    <div class="relative cursor-pointer overflow-hidden" 
+                         style="max-width: 280px; min-width: 200px;"
+                         onclick="openFullscreenImage('${imageUrl}', '${escapedCaption}', '${formatMessageTime(msg.timestamp)}')">
+                      
+                      <!-- Clean bubble container -->
+                      <div class="${isMe ? 'bg-white' : 'bg-gray-800'} rounded-2xl ${isLastInGroup ? (isMe ? 'rounded-br-md' : 'rounded-bl-md') : ''} overflow-hidden shadow-sm">
+                        
+                        <!-- Image with padding -->
+                        <div class="p-1">
+                          <div class="relative rounded-xl overflow-hidden">
+                            <img src="${imageUrl}" 
+                                 alt="Photo" 
+                                 class="w-full block object-cover"
+                                 style="max-height: 300px; min-height: 150px;"
+                                 loading="lazy"
+                                 onerror="this.parentElement.innerHTML='<div class=\\'p-8 text-center text-gray-500\\'>📷 Image failed to load</div>'">
+                            
+                            <!-- Time badge overlay on image (no caption) -->
+                            ${!imageCaption ? `
+                              <div class="absolute bottom-1.5 right-1.5 bg-black/50 backdrop-blur-sm rounded-full px-2 py-0.5 flex items-center gap-1">
+                                <span class="text-[10px] text-white">${formatMessageTime(msg.timestamp)}</span>
+                                ${isMe ? `<span class="text-white">${statusIcon.replace(/text-gray-\d+/g, 'text-white').replace(/w-4 h-4/g, 'w-3 h-3')}</span>` : ''}
+                              </div>
+                            ` : ''}
+                          </div>
+                        </div>
+                        
+                        <!-- Caption (if present) -->
+                        ${imageCaption ? `
+                          <div class="px-3 pb-2 pt-1">
+                            <p class="${isMe ? 'text-black' : 'text-white'} text-[14px] leading-snug">${formatMessageText(imageCaption)}</p>
+                            <div class="flex items-center justify-end gap-1 mt-1">
+                              <span class="text-[10px] ${isMe ? 'text-gray-500' : 'text-gray-400'}">${formatMessageTime(msg.timestamp)}</span>
+                              ${isMe ? statusIcon : ''}
+                            </div>
+                          </div>
+                        ` : ''}
+                      </div>
+                    </div>
+                  </div>
+                `;
+              }
               
               return `
                 <div class="flex ${isMe ? 'justify-end' : 'justify-start'} ${isFirstInGroup ? 'mt-2' : ''}">
@@ -4525,6 +6408,86 @@
       formatted = formatted.replace(/(https?:\/\/[^\s]+)/g, '<a href="$1" target="_blank" class="text-white underline hover:no-underline">$1</a>');
       return formatted;
     }
+    
+    // Open fullscreen image viewer (like WhatsApp)
+    function openFullscreenImage(imageUrl, caption, time) {
+      const viewerHtml = `
+        <div id="fullscreen-image-viewer" class="fixed inset-0 z-[70] bg-black flex flex-col">
+          <!-- Header -->
+          <div class="flex items-center justify-between p-4 bg-gradient-to-b from-black/80 to-transparent absolute top-0 left-0 right-0 z-10">
+            <button id="close-fullscreen-image" class="w-10 h-10 rounded-full flex items-center justify-center text-white hover:bg-white/20 transition-all">
+              <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+            </button>
+            <div class="flex items-center gap-2">
+              <button id="share-image" class="w-10 h-10 rounded-full flex items-center justify-center text-white hover:bg-white/20 transition-all" title="Share">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"/></svg>
+              </button>
+              <button id="download-image" class="w-10 h-10 rounded-full flex items-center justify-center text-white hover:bg-white/20 transition-all" title="Download">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+              </button>
+            </div>
+          </div>
+          
+          <!-- Image -->
+          <div class="flex-1 flex items-center justify-center p-4">
+            <img src="${imageUrl}" alt="Full screen" class="max-w-full max-h-full object-contain">
+          </div>
+          
+          <!-- Caption and time -->
+          <div class="absolute bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-black/80 to-transparent">
+            ${caption ? `<p class="text-white text-center mb-1">${caption}</p>` : ''}
+            <p class="text-gray-400 text-xs text-center">${time}</p>
+          </div>
+        </div>
+      `;
+      
+      document.body.insertAdjacentHTML('beforeend', viewerHtml);
+      
+      // Close on click
+      document.getElementById('close-fullscreen-image')?.addEventListener('click', () => {
+        document.getElementById('fullscreen-image-viewer')?.remove();
+      });
+      
+      // Download image
+      document.getElementById('download-image')?.addEventListener('click', () => {
+        const link = document.createElement('a');
+        link.href = imageUrl;
+        link.download = 'linkup-image-' + Date.now() + '.jpg';
+        link.click();
+      });
+      
+      // Close on escape key
+      const handleEscape = (e) => {
+        if (e.key === 'Escape') {
+          document.getElementById('fullscreen-image-viewer')?.remove();
+          document.removeEventListener('keydown', handleEscape);
+        }
+      };
+      document.addEventListener('keydown', handleEscape);
+    }
+    
+    // Make openFullscreenImage available globally
+    window.openFullscreenImage = openFullscreenImage;
+    
+    // Download document function
+    function downloadDocument(base64Data, fileName) {
+      try {
+        // Create a link element and trigger download
+        const link = document.createElement('a');
+        link.href = base64Data;
+        link.download = fileName || 'document';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        log('Document downloaded: ' + fileName);
+      } catch (err) {
+        log('Download error: ' + err.message);
+        alert('Failed to download document. Please try again.');
+      }
+    }
+    
+    // Make downloadDocument available globally
+    window.downloadDocument = downloadDocument;
 
     // Initialize
     renderFull();
